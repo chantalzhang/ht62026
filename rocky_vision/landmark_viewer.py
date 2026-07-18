@@ -109,6 +109,7 @@ def main():
     prev_time = time.perf_counter()
     fps = 0.0
     last_locked = None
+    armed = False
     stabilizer = GestureStabilizer(args.stable_frames)
 
     with mp_hands.Hands(
@@ -146,10 +147,12 @@ def main():
                     mp_drawing_styles.get_default_hand_connections_style(),
                 )
 
-            locked = stabilizer.update(gesture)
-            if locked and locked != last_locked:
-                print(f"Locked: {locked} -> Rocky: {counter_move(locked)}")
-                last_locked = locked
+            locked = stabilizer.locked
+            if armed and not locked:
+                locked = stabilizer.update(gesture)
+                if locked and locked != last_locked:
+                    print(f"Locked: {locked} -> Rocky: {counter_move(locked)}")
+                    last_locked = locked
 
             now = time.perf_counter()
             instant_fps = 1.0 / max(now - prev_time, 1e-6)
@@ -166,10 +169,11 @@ def main():
                 2,
                 cv2.LINE_AA,
             )
-            stable_text = "LOCKED" if locked else f"{stabilizer.count}/{args.stable_frames}"
+            state = "LOCKED" if locked else "ARMED" if armed else "WAITING"
+            stable_text = "-" if not armed else "LOCKED" if locked else f"{stabilizer.count}/{args.stable_frames}"
             cv2.putText(
                 frame,
-                f"Gesture: {gesture.upper()}  Stable: {stable_text}",
+                f"State: {state}  Gesture: {gesture.upper()}  Stable: {stable_text}",
                 (16, 64),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.8,
@@ -190,7 +194,7 @@ def main():
 
             cv2.putText(
                 frame,
-                "Press r to reset, q to quit",
+                "Press space to arm, r to reset, q to quit",
                 (16, 128),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
@@ -201,7 +205,13 @@ def main():
 
             cv2.imshow("Rocky hand landmark viewer", frame)
             key = cv2.waitKey(1) & 0xFF
-            if key == ord("r"):
+            if key == ord(" "):
+                armed = True
+                stabilizer.reset()
+                last_locked = None
+                print("Armed")
+            elif key == ord("r"):
+                armed = False
                 stabilizer.reset()
                 last_locked = None
                 print("Reset")
