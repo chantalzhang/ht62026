@@ -1,4 +1,4 @@
-from zero_vision.gesture_classifier import PAPER, ROCK, SCISSORS
+from rocky_vision.gesture_classifier import PAPER, ROCK, SCISSORS
 
 
 COUNTERS = {
