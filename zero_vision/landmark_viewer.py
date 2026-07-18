@@ -5,6 +5,7 @@ import cv2
 import mediapipe as mp
 
 from zero_vision.gesture_classifier import UNKNOWN, classify_rps
+from zero_vision.rps import counter_move
 from zero_vision.stability import GestureStabilizer
 
 
@@ -147,7 +148,7 @@ def main():
 
             locked = stabilizer.update(gesture)
             if locked and locked != last_locked:
-                print(f"Locked: {locked}")
+                print(f"Locked: {locked} -> Zero: {counter_move(locked)}")
                 last_locked = locked
 
             now = time.perf_counter()
@@ -178,7 +179,7 @@ def main():
             )
             cv2.putText(
                 frame,
-                f"Locked: {(locked or '-').upper()}",
+                f"Locked: {(locked or '-').upper()}  Zero: {(counter_move(locked) or '-').upper()}",
                 (16, 96),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
