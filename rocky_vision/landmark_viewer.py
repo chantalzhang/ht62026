@@ -7,6 +7,7 @@ import mediapipe as mp
 from rocky_vision.gesture_classifier import UNKNOWN, classify_rps
 from rocky_vision.rps import counter_move
 from rocky_vision.stability import GestureStabilizer
+from rocky_vision.ui import render_game
 
 
 mp_hands = mp.solutions.hands
@@ -110,6 +111,15 @@ def main():
     fps = 0.0
     last_locked = None
     armed = False
+    rocky_score = 0
+    locked_frame = None
+    taunts = [
+        "Rocky wins again.",
+        "You can't beat Rocky.",
+        "Too slow.",
+        "Rocky remains undefeated.",
+    ]
+    taunt = taunts[0]
     stabilizer = GestureStabilizer(args.stable_frames)
 
     with mp_hands.Hands(
@@ -151,6 +161,9 @@ def main():
             if armed and not locked:
                 locked = stabilizer.update(gesture)
                 if locked and locked != last_locked:
+                    rocky_score += 1
+                    locked_frame = frame.copy()
+                    taunt = taunts[(rocky_score - 1) % len(taunts)]
                     print(f"Locked: {locked} -> Rocky: {counter_move(locked)}")
                     last_locked = locked
 
@@ -159,62 +172,39 @@ def main():
             fps = instant_fps if fps == 0.0 else (0.9 * fps + 0.1 * instant_fps)
             prev_time = now
 
-            cv2.putText(
-                frame,
-                f"{camera.name} | MediaPipe Hands | FPS: {fps:.1f}",
-                (16, 32),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (0, 255, 255),
-                2,
-                cv2.LINE_AA,
-            )
             state = "LOCKED" if locked else "ARMED" if armed else "WAITING"
             stable_text = "-" if not armed else "LOCKED" if locked else f"{stabilizer.count}/{args.stable_frames}"
-            cv2.putText(
-                frame,
-                f"State: {state}  Gesture: {gesture.upper()}  Stable: {stable_text}",
-                (16, 64),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (0, 255, 0),
-                2,
-                cv2.LINE_AA,
-            )
-            cv2.putText(
-                frame,
-                f"Locked: {(locked or '-').upper()}  Rocky: {(counter_move(locked) or '-').upper()}",
-                (16, 96),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 128, 255) if locked else (255, 255, 255),
-                2,
-                cv2.LINE_AA,
+            display_frame = locked_frame if locked_frame is not None else frame
+            ui = render_game(
+                display_frame,
+                state=state,
+                gesture=gesture,
+                stable=stable_text,
+                locked=locked,
+                rocky_move=counter_move(locked),
+                score=rocky_score,
+                fps=fps,
+                camera_name=camera.name,
+                taunt=taunt,
             )
 
-            cv2.putText(
-                frame,
-                "Press space to arm, r to reset, q to quit",
-                (16, 128),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (255, 255, 255),
-                2,
-                cv2.LINE_AA,
-            )
-
-            cv2.imshow("Rocky hand landmark viewer", frame)
+            cv2.imshow("Rocky RPS", ui)
             key = cv2.waitKey(1) & 0xFF
             if key == ord(" "):
                 armed = True
                 stabilizer.reset()
                 last_locked = None
+                locked_frame = None
                 print("Armed")
             elif key == ord("r"):
                 armed = False
                 stabilizer.reset()
                 last_locked = None
+                locked_frame = None
                 print("Reset")
+            elif key == ord("c"):
+                rocky_score = 0
+                print("Score cleared")
             elif key == ord("q"):
                 break
 
