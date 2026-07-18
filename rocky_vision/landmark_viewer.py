@@ -4,9 +4,9 @@ import time
 import cv2
 import mediapipe as mp
 
-from zero_vision.gesture_classifier import UNKNOWN, classify_rps
-from zero_vision.rps import counter_move
-from zero_vision.stability import GestureStabilizer
+from rocky_vision.gesture_classifier import UNKNOWN, classify_rps
+from rocky_vision.rps import counter_move
+from rocky_vision.stability import GestureStabilizer
 
 
 mp_hands = mp.solutions.hands
@@ -148,7 +148,7 @@ def main():
 
             locked = stabilizer.update(gesture)
             if locked and locked != last_locked:
-                print(f"Locked: {locked} -> Zero: {counter_move(locked)}")
+                print(f"Locked: {locked} -> Rocky: {counter_move(locked)}")
                 last_locked = locked
 
             now = time.perf_counter()
@@ -179,7 +179,7 @@ def main():
             )
             cv2.putText(
                 frame,
-                f"Locked: {(locked or '-').upper()}  Zero: {(counter_move(locked) or '-').upper()}",
+                f"Locked: {(locked or '-').upper()}  Rocky: {(counter_move(locked) or '-').upper()}",
                 (16, 96),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
@@ -199,7 +199,7 @@ def main():
                 cv2.LINE_AA,
             )
 
-            cv2.imshow("Zero hand landmark viewer", frame)
+            cv2.imshow("Rocky hand landmark viewer", frame)
             key = cv2.waitKey(1) & 0xFF
             if key == ord("r"):
                 stabilizer.reset()

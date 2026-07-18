@@ -1,4 +1,4 @@
-from zero_vision.gesture_classifier import UNKNOWN
+from rocky_vision.gesture_classifier import UNKNOWN
 
 
 class GestureStabilizer:
