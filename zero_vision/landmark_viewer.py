@@ -5,6 +5,7 @@ import cv2
 import mediapipe as mp
 
 from zero_vision.gesture_classifier import UNKNOWN, classify_rps
+from zero_vision.stability import GestureStabilizer
 
 
 mp_hands = mp.solutions.hands
@@ -80,6 +81,7 @@ def parse_args():
     parser.add_argument("--height", type=int, default=480)
     parser.add_argument("--min-detection-confidence", type=float, default=0.6)
     parser.add_argument("--min-tracking-confidence", type=float, default=0.5)
+    parser.add_argument("--stable-frames", type=int, default=3)
     return parser.parse_args()
 
 
@@ -105,7 +107,8 @@ def main():
 
     prev_time = time.perf_counter()
     fps = 0.0
-    last_gesture = None
+    last_locked = None
+    stabilizer = GestureStabilizer(args.stable_frames)
 
     with mp_hands.Hands(
         static_image_mode=False,
@@ -142,9 +145,10 @@ def main():
                     mp_drawing_styles.get_default_hand_connections_style(),
                 )
 
-            if gesture != last_gesture:
-                print(f"Gesture: {gesture}")
-                last_gesture = gesture
+            locked = stabilizer.update(gesture)
+            if locked and locked != last_locked:
+                print(f"Locked: {locked}")
+                last_locked = locked
 
             now = time.perf_counter()
             instant_fps = 1.0 / max(now - prev_time, 1e-6)
@@ -161,9 +165,10 @@ def main():
                 2,
                 cv2.LINE_AA,
             )
+            stable_text = "LOCKED" if locked else f"{stabilizer.count}/{args.stable_frames}"
             cv2.putText(
                 frame,
-                f"Gesture: {gesture.upper()}",
+                f"Gesture: {gesture.upper()}  Stable: {stable_text}",
                 (16, 64),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.8,
@@ -173,8 +178,19 @@ def main():
             )
             cv2.putText(
                 frame,
-                "Press q to quit",
+                f"Locked: {(locked or '-').upper()}",
                 (16, 96),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 128, 255) if locked else (255, 255, 255),
+                2,
+                cv2.LINE_AA,
+            )
+
+            cv2.putText(
+                frame,
+                "Press r to reset, q to quit",
+                (16, 128),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
                 (255, 255, 255),
@@ -183,7 +199,12 @@ def main():
             )
 
             cv2.imshow("Zero hand landmark viewer", frame)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("r"):
+                stabilizer.reset()
+                last_locked = None
+                print("Reset")
+            elif key == ord("q"):
                 break
 
     camera.close()
