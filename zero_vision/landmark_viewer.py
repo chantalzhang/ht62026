@@ -4,6 +4,8 @@ import time
 import cv2
 import mediapipe as mp
 
+from zero_vision.gesture_classifier import UNKNOWN, classify_rps
+
 
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
@@ -103,6 +105,7 @@ def main():
 
     prev_time = time.perf_counter()
     fps = 0.0
+    last_gesture = None
 
     with mp_hands.Hands(
         static_image_mode=False,
@@ -127,15 +130,21 @@ def main():
             # OpenCV display/drawing uses BGR.
             frame = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
+            gesture = UNKNOWN
             if results.multi_hand_landmarks:
-                for hand_landmarks in results.multi_hand_landmarks:
-                    mp_drawing.draw_landmarks(
-                        frame,
-                        hand_landmarks,
-                        mp_hands.HAND_CONNECTIONS,
-                        mp_drawing_styles.get_default_hand_landmarks_style(),
-                        mp_drawing_styles.get_default_hand_connections_style(),
-                    )
+                hand_landmarks = results.multi_hand_landmarks[0]
+                gesture = classify_rps(hand_landmarks)
+                mp_drawing.draw_landmarks(
+                    frame,
+                    hand_landmarks,
+                    mp_hands.HAND_CONNECTIONS,
+                    mp_drawing_styles.get_default_hand_landmarks_style(),
+                    mp_drawing_styles.get_default_hand_connections_style(),
+                )
+
+            if gesture != last_gesture:
+                print(f"Gesture: {gesture}")
+                last_gesture = gesture
 
             now = time.perf_counter()
             instant_fps = 1.0 / max(now - prev_time, 1e-6)
@@ -154,8 +163,18 @@ def main():
             )
             cv2.putText(
                 frame,
-                "Press q to quit",
+                f"Gesture: {gesture.upper()}",
                 (16, 64),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 255, 0),
+                2,
+                cv2.LINE_AA,
+            )
+            cv2.putText(
+                frame,
+                "Press q to quit",
+                (16, 96),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
                 (255, 255, 255),
