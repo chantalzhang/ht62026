@@ -28,6 +28,7 @@ class Game:
         self.lock = threading.Lock()
         self.stabilizer = GestureStabilizer(args.stable_frames)
         self.armed = False
+        self.countdown_start = None
         self.score = 0
         self.gesture = UNKNOWN
         self.frame_jpg = None
@@ -37,9 +38,11 @@ class Game:
         with self.lock:
             locked = self.stabilizer.locked
             rocky = counter_move(locked)
+            countdown_word = self.countdown_word()
             stable = "LOCKED" if locked else f"{self.stabilizer.count}/{self.args.stable_frames}"
             return {
-                "state": "LOCKED" if locked else "ARMED" if self.armed else "WAITING",
+                "state": "LOCKED" if locked else "COUNTDOWN" if countdown_word else "ARMED" if self.armed else "WAITING",
+                "countdown_word": countdown_word,
                 "gesture": self.gesture,
                 "stable": stable,
                 "locked": locked,
@@ -48,13 +51,31 @@ class Game:
                 "score": self.score,
             }
 
+    def countdown_word(self):
+        if self.countdown_start is None:
+            return None
+        elapsed = time.monotonic() - self.countdown_start
+        words = ["ROCK", "PAPER", "SCISSORS"]
+        index = int(elapsed / self.args.countdown_step)
+        return words[index] if index < len(words) else None
+
+    def update_countdown(self):
+        if self.countdown_start is None:
+            return
+        if time.monotonic() - self.countdown_start >= self.args.countdown_step * 3:
+            self.countdown_start = None
+            self.armed = True
+            self.stabilizer.reset()
+
     def control(self, key):
         with self.lock:
             if key == "space":
-                self.armed = True
+                self.armed = False
+                self.countdown_start = time.monotonic()
                 self.stabilizer.reset()
             elif key == "r":
                 self.armed = False
+                self.countdown_start = None
                 self.stabilizer.reset()
             elif key == "c":
                 self.score = 0
@@ -86,6 +107,7 @@ class Game:
 
                 with self.lock:
                     self.gesture = gesture
+                    self.update_countdown()
                     was_locked = self.stabilizer.locked
                     if self.armed and not was_locked:
                         locked = self.stabilizer.update(gesture)
@@ -156,6 +178,7 @@ def parse_args():
     parser.add_argument("--width", type=int, default=640)
     parser.add_argument("--height", type=int, default=480)
     parser.add_argument("--stable-frames", type=int, default=3)
+    parser.add_argument("--countdown-step", type=float, default=0.74)
     parser.add_argument("--min-detection-confidence", type=float, default=0.6)
     parser.add_argument("--min-tracking-confidence", type=float, default=0.5)
     parser.add_argument("--port", type=int, default=8765)
