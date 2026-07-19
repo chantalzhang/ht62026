@@ -105,6 +105,13 @@ def _load_camapi():
     lib.camera_close.restype = ctypes.c_int32
     lib.camera_set_vf_mode.argtypes = [ctypes.c_int32, ctypes.c_int32]
     lib.camera_set_vf_mode.restype = ctypes.c_int32
+    lib.camera_get_supported_vf_modes.argtypes = [
+        ctypes.c_int32,
+        ctypes.c_uint32,
+        ctypes.POINTER(ctypes.c_uint32),
+        ctypes.POINTER(ctypes.c_int32),
+    ]
+    lib.camera_get_supported_vf_modes.restype = ctypes.c_int32
     lib.camera_start_viewfinder.argtypes = [ctypes.c_int32, viewfinder_cb_t, status_cb_t, ctypes.c_void_p]
     lib.camera_start_viewfinder.restype = ctypes.c_int32
     lib.camera_stop_viewfinder.argtypes = [ctypes.c_int32]
@@ -117,6 +124,26 @@ def _load_camapi():
         "status_cb_t": status_cb_t,
     }
     return _camapi
+
+
+def get_supported_vf_modes(handle: int):
+    """Debug helper: return the list of camera_vfmode_t values this camera
+    handle actually supports, per camera_get_supported_vf_modes()."""
+    camapi = _load_camapi()
+    lib = camapi["lib"]
+
+    num_supported = ctypes.c_uint32(0)
+    err = lib.camera_get_supported_vf_modes(handle, 0, ctypes.byref(num_supported), None)
+    if err != CAMERA_EOK:
+        raise RuntimeError(f"camera_get_supported_vf_modes(presize) failed: err={err}")
+
+    count = num_supported.value
+    modes = (ctypes.c_int32 * count)()
+    err = lib.camera_get_supported_vf_modes(handle, count, ctypes.byref(num_supported), modes)
+    if err != CAMERA_EOK:
+        raise RuntimeError(f"camera_get_supported_vf_modes failed: err={err}")
+
+    return list(modes[: num_supported.value])
 
 
 def _yuv422_to_rgb(y0, cb, y1, cr):
