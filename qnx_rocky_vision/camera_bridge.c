@@ -183,17 +183,44 @@ static void convert_nv12(const uint8_t *framebuf, uint32_t height, uint32_t widt
     }
 }
 
+/* Logged for the first several callbacks (frames are frequent, so we
+ * throttle after that) to make the callback's behaviour visible instead of
+ * silently dropping frames whose dimensions come out to 0. */
+static int g_callbacks_logged = 0;
+#define MAX_CALLBACKS_LOGGED 5
+
 static void viewfinder_callback(camera_handle_t handle, camera_buffer_t *buf, void *arg) {
     (void)handle;
     (void)arg;
 
     uint32_t height = 0, width = 0;
     uint8_t *rgb;
+    int should_log = g_callbacks_logged < MAX_CALLBACKS_LOGGED;
+    if (should_log) {
+        g_callbacks_logged++;
+        fprintf(stderr,
+                "camera_bridge: callback fired #%d: frametype=%d (NV12=%d, RGB8888=%d, "
+                "BGR8888=%d, YCBYCR=%d, CBYCRY=%d) framesize=%llu\n",
+                g_callbacks_logged, buf->frametype, CAMERA_FRAMETYPE_NV12,
+                CAMERA_FRAMETYPE_RGB8888, CAMERA_FRAMETYPE_BGR8888, CAMERA_FRAMETYPE_YCBYCR,
+                CAMERA_FRAMETYPE_CBYCRY, (unsigned long long)buf->framesize);
+    }
 
     if (buf->frametype == CAMERA_FRAMETYPE_NV12) {
         height = buf->framedesc.nv12.height;
         width = buf->framedesc.nv12.width;
+        if (should_log) {
+            fprintf(stderr,
+                    "camera_bridge:   nv12 framedesc: height=%u width=%u stride=%u "
+                    "uv_offset=%lld uv_stride=%lld\n",
+                    height, width, buf->framedesc.nv12.stride,
+                    (long long)buf->framedesc.nv12.uv_offset,
+                    (long long)buf->framedesc.nv12.uv_stride);
+        }
         if (height == 0 || width == 0) {
+            if (should_log) {
+                fprintf(stderr, "camera_bridge:   dropping frame: zero height/width\n");
+            }
             return;
         }
         rgb = get_rgb_buffer((size_t)height * width * 3);
@@ -214,7 +241,20 @@ static void viewfinder_callback(camera_handle_t handle, camera_buffer_t *buf, vo
         memcpy(&height, desc + 0, sizeof(uint32_t));
         memcpy(&width, desc + sizeof(uint32_t), sizeof(uint32_t));
         memcpy(&stride, desc + 2 * sizeof(uint32_t), sizeof(uint32_t));
+        if (should_log) {
+            fprintf(stderr,
+                    "camera_bridge:   guessed framedesc (first 3 uint32s): height=%u width=%u "
+                    "stride=%u; first 32 raw bytes:",
+                    height, width, stride);
+            for (int i = 0; i < 32; i++) {
+                fprintf(stderr, " %02x", desc[i]);
+            }
+            fprintf(stderr, "\n");
+        }
         if (height == 0 || width == 0 || stride == 0) {
+            if (should_log) {
+                fprintf(stderr, "camera_bridge:   dropping frame: zero height/width/stride\n");
+            }
             return;
         }
 
