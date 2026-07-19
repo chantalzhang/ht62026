@@ -7,9 +7,16 @@ run pinpoints exactly where and why anything fails, without needing another
 round trip to add print statements.
 
 Run with:
-    python3 -m qnx_rocky_vision.diagnose_camera
+    python3 -m qnx_rocky_vision.diagnose_camera [--callbacks real|null|vf-null|status-null]
+
+--callbacks real        (default) real Python callbacks for both viewfinder and status.
+--callbacks null        true NULL function pointers (via ctypes.cast) for BOTH callbacks --
+                        isolates whether the crash is in the callback machinery at all.
+--callbacks vf-null     real status callback, but NULL viewfinder callback.
+--callbacks status-null real viewfinder callback, but NULL status callback.
 """
 
+import argparse
 import ctypes
 import time
 import traceback
@@ -32,7 +39,18 @@ def log(step, msg):
     print(f"[{step}] {msg}", flush=True)
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--callbacks",
+        choices=("real", "null", "vf-null", "status-null"),
+        default="real",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     log("1", "loading libcamapi and binding functions...")
     camapi = _load_camapi()
     lib = camapi["lib"]
@@ -94,10 +112,21 @@ def main():
         def _on_status(_handle, status, ext_status, _arg):
             log("status", f"status callback: status={status} ext_status={ext_status}")
 
-        viewfinder_cb = camapi["viewfinder_cb_t"](_on_frame)
-        status_cb = camapi["status_cb_t"](_on_status)
+        real_viewfinder_cb = camapi["viewfinder_cb_t"](_on_frame)
+        real_status_cb = camapi["status_cb_t"](_on_status)
+        null_viewfinder_cb = ctypes.cast(None, camapi["viewfinder_cb_t"])
+        null_status_cb = ctypes.cast(None, camapi["status_cb_t"])
 
-        log("5", "camera_start_viewfinder...")
+        if args.callbacks == "null":
+            viewfinder_cb, status_cb = null_viewfinder_cb, null_status_cb
+        elif args.callbacks == "vf-null":
+            viewfinder_cb, status_cb = null_viewfinder_cb, real_status_cb
+        elif args.callbacks == "status-null":
+            viewfinder_cb, status_cb = real_viewfinder_cb, null_status_cb
+        else:
+            viewfinder_cb, status_cb = real_viewfinder_cb, real_status_cb
+
+        log("5", f"camera_start_viewfinder (callbacks={args.callbacks})...")
         err = lib.camera_start_viewfinder(h, viewfinder_cb, status_cb, None)
         log("5", f"err={err}")
         if err != CAMERA_EOK:
