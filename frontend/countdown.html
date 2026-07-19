@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Entering the Ring</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      background: #111;
+      font-family: "Arial Black", Impact, Arial, sans-serif;
+    }
+    .ring {
+      position: fixed;
+      inset: -28px;
+      background: url("assets/boxing_ring.jpg") center / cover no-repeat;
+      animation: focus 3.0s ease-out forwards;
+    }
+    .shade {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      animation: fadeShade 3.0s ease-out forwards;
+    }
+    .text {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      text-align: center;
+      color: white;
+      font-size: clamp(28px, 5vw, 58px);
+      letter-spacing: 2px;
+      text-shadow: 0 5px 0 #111;
+      animation: fadeText 3.0s ease-out forwards;
+    }
+    @keyframes focus {
+      0% { filter: blur(24px) saturate(.45); transform: scale(1.08); }
+      100% { filter: blur(2px) saturate(.8); transform: scale(1); }
+    }
+    @keyframes fadeShade {
+      0% { opacity: .45; }
+      100% { opacity: .08; }
+    }
+    @keyframes fadeText {
+      0%, 75% { opacity: 1; transform: translateY(-50%); }
+      100% { opacity: 0; transform: translateY(calc(-50% + 12px)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="ring"></div>
+  <div class="shade"></div>
+  <div class="text">ENTERING THE RING...</div>
+
+  <script>
+    setTimeout(() => {
+      window.location.href = '/game.html';
+    }, 3100);
+  </script>
+</body>
+</html>
