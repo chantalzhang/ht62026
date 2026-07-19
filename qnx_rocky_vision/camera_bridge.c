@@ -292,14 +292,48 @@ static void viewfinder_callback(camera_handle_t handle, camera_buffer_t *buf, vo
     write_all(1, rgb, (size_t)height * width * 3);
 }
 
+/* Reports viewfinder lifecycle events independent of whether any frame
+ * callback ever fires -- e.g. if we see CAMERA_STATUS_VIEWFINDER_ACTIVE but
+ * no frame callback, the datapath itself (sensor service / config) is the
+ * problem, not this program's frame handling. */
+static void status_callback(camera_handle_t handle, camera_devstatus_t status, uint16_t ext_status, void *arg) {
+    (void)handle;
+    (void)arg;
+    fprintf(stderr, "camera_bridge: status callback: status=%d ext_status=%u\n", status, ext_status);
+}
+
 int main(void) {
     camera_handle_t handle = CAMERA_HANDLE_INVALID;
     camera_error_t err;
 
-    err = camera_open(CAMERA_UNIT_1, CAMERA_MODE_PREAD | CAMERA_MODE_PWRITE | CAMERA_MODE_DREAD, &handle);
+    /* CAMERA_MODE_ROLL ("access to the camera roll") is included here to
+     * match QNX's own reference MediaPipe camera sink sample exactly
+     * (camera_open(unit, CAMERA_MODE_RO | CAMERA_MODE_ROLL | CAMERA_MODE_PWRITE, ...)),
+     * since camera_open succeeding without it previously still resulted in
+     * camera_start_viewfinder never delivering a single frame callback. */
+    err = camera_open(
+        CAMERA_UNIT_1,
+        CAMERA_MODE_PREAD | CAMERA_MODE_PWRITE | CAMERA_MODE_DREAD | CAMERA_MODE_ROLL,
+        &handle);
     if (err != CAMERA_EOK) {
         fprintf(stderr, "camera_bridge: camera_open failed: err=%d\n", err);
         return 1;
+    }
+    fprintf(stderr, "camera_bridge: camera_open OK, handle=%d\n", handle);
+
+    {
+        unsigned int num_modes = 0;
+        camera_get_supported_vf_modes(handle, 0, &num_modes, NULL);
+        camera_vfmode_t modes[16];
+        if (num_modes > 16) {
+            num_modes = 16;
+        }
+        camera_get_supported_vf_modes(handle, num_modes, &num_modes, modes);
+        fprintf(stderr, "camera_bridge: supported vf modes (%u):", num_modes);
+        for (unsigned int i = 0; i < num_modes; i++) {
+            fprintf(stderr, " %d", modes[i]);
+        }
+        fprintf(stderr, " (CAMERA_VFMODE_VIDEO=%d)\n", CAMERA_VFMODE_VIDEO);
     }
 
     err = camera_set_vf_mode(handle, CAMERA_VFMODE_VIDEO);
@@ -316,7 +350,16 @@ int main(void) {
         return 1;
     }
 
-    err = camera_start_viewfinder(handle, viewfinder_callback, NULL, NULL);
+    {
+        camera_frametype_t configured_frametype = CAMERA_FRAMETYPE_UNSPECIFIED;
+        err = camera_get_vf_property(handle, CAMERA_IMGPROP_FORMAT, &configured_frametype);
+        fprintf(stderr,
+                "camera_bridge: configured vf frametype=%d (err=%d; NV12=%d YCBYCR=%d RGB8888=%d)\n",
+                configured_frametype, err, CAMERA_FRAMETYPE_NV12, CAMERA_FRAMETYPE_YCBYCR,
+                CAMERA_FRAMETYPE_RGB8888);
+    }
+
+    err = camera_start_viewfinder(handle, viewfinder_callback, status_callback, NULL);
     if (err != CAMERA_EOK) {
         fprintf(stderr, "camera_bridge: camera_start_viewfinder failed: err=%d\n", err);
         camera_close(handle);
