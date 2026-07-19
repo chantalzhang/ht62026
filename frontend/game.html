@@ -77,11 +77,15 @@
   <g id="rockyCard" class="rocky-pop" filter="url(#shadow)">
     <rect x="55" y="200" width="540" height="440" rx="30" fill="#D94A4A" stroke="#0B0B0B" stroke-width="9"/>
     <text x="325" y="248" text-anchor="middle" class="label" fill="#FFFFFF" stroke="#0B0B0B" stroke-width="6" paint-order="stroke">ROCKY</text>
-    <rect x="145" y="275" width="360" height="275" rx="16" fill="#FFFFFF"/>
-    <g clip-path="url(#rockyFistClip)">
-      <image id="rockyFist" href="assets/rocky_fist.png" x="120" y="245" width="410" height="335" preserveAspectRatio="xMidYMid meet"/>
+    <g id="rockyFistGroup">
+      <rect x="145" y="275" width="360" height="275" rx="16" fill="#FFFFFF"/>
+      <g clip-path="url(#rockyFistClip)">
+        <image id="rockyFist" href="assets/rocky_fist.png" x="120" y="245" width="410" height="335" preserveAspectRatio="xMidYMid meet"/>
+      </g>
+      <rect x="145" y="275" width="360" height="275" rx="16" fill="none" stroke="#FFFFFF" stroke-width="5"/>
     </g>
-    <rect x="145" y="275" width="360" height="275" rx="16" fill="none" stroke="#FFFFFF" stroke-width="5"/>
+    <rect id="rockyMoveBox" x="145" y="275" width="360" height="275" rx="16" fill="#181820" stroke="#FFFFFF" stroke-width="5" style="display:none"/>
+    <image id="rockyMove" href="" x="185" y="270" width="280" height="280" preserveAspectRatio="xMidYMid meet" style="display:none"/>
     <rect id="resultPill" x="120" y="575" width="410" height="46" rx="16" fill="#EFCB4A" stroke="#0B0B0B" stroke-width="5" style="display:none"/>
     <text id="resultText" x="325" y="608" text-anchor="middle" class="small" fill="#0B0B0B" style="display:none">ROCKY WINS!</text>
   </g>
@@ -108,7 +112,7 @@
 </svg>
 
 <script>
-const bg = { rock: '#181820', paper: '#1F5F8F', scissors: '#3B1B5E' };
+const bg = { rock: '#181820', paper: '#2F7D4F', scissors: '#3B1B5E' };
 const img = move => move ? `assets/${move}.png` : '';
 let lastLockId = 0;
 
@@ -144,6 +148,12 @@ async function tick() {
   }
 
   if (s.locked) {
+    rockyFistGroup.style.display = 'none';
+    rockyMoveBox.style.display = 'block';
+    rockyMove.style.display = 'block';
+    rockyMove.setAttribute('href', img(s.rocky_move));
+    rockyMoveBox.setAttribute('fill', bg[s.rocky_move]);
+
     camera.style.display = 'none';
     youMove.style.display = 'block';
     youMove.setAttribute('href', img(s.locked));
@@ -154,6 +164,10 @@ async function tick() {
     resultText.textContent = (s.result || 'Rocky wins').toUpperCase() + '!';
     youText.textContent = `THREW: ${s.locked.toUpperCase()}`;
   } else {
+    rockyFistGroup.style.display = 'block';
+    rockyMoveBox.style.display = 'none';
+    rockyMove.style.display = 'none';
+
     camera.style.display = 'block';
     youMove.style.display = 'none';
     youBox.setAttribute('fill', '#15151D');
