@@ -12,7 +12,7 @@ import urllib.request
 
 from rocky_vision.gesture_classifier import PAPER, ROCK, SCISSORS
 
-PI_HOST = "qnxpi-rocky"
+PI_HOST = "qnxpi-rocky.local"
 PI_PORT = 8080
 BASE_URL = f"http://{PI_HOST}:{PI_PORT}"
 
