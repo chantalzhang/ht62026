@@ -120,9 +120,10 @@ class Game:
                     gesture = classify_rps(hand)
                     mp_drawing.draw_landmarks(frame, hand, mp_hands.HAND_CONNECTIONS)
 
-                ok, jpg = cv2.imencode(".jpg", frame)
-                frame_bytes = jpg.tobytes() if ok else None
-
+                # Decide (and fire the servo command) before spending any time
+                # encoding the reveal photo, so the Pi gets the move the instant
+                # the gesture locks rather than after we've taken the picture.
+                just_locked = False
                 with self.lock:
                     self.gesture = gesture
                     self.update_countdown()
@@ -130,12 +131,19 @@ class Game:
                     if self.armed and not was_locked:
                         locked = self.stabilizer.update(gesture)
                         if locked:
-                            self.score += 1
-                            self.lock_id += 1
-                            self.locked_frame_jpg = frame_bytes
                             rocky_move = counter_move(locked)
                             self.last_rocky_move = rocky_move
                             pi_client.send_move(rocky_move)
+                            self.score += 1
+                            self.lock_id += 1
+                            just_locked = True
+
+                ok, jpg = cv2.imencode(".jpg", frame)
+                frame_bytes = jpg.tobytes() if ok else None
+
+                with self.lock:
+                    if just_locked:
+                        self.locked_frame_jpg = frame_bytes
                     if frame_bytes:
                         self.frame_jpg = frame_bytes
 
