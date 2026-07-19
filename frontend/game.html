@@ -152,6 +152,8 @@
   </g>
   <rect id="flashOverlay" width="1280" height="720" fill="#FFFFFF" opacity="0"/>
 </svg>
+<audio id="rpsBeep" src="assets/sounds/rps_beep.mp3" preload="auto"></audio>
+<audio id="shootBeep" src="assets/sounds/shoot_beep.mp3" preload="auto"></audio>
 
 <script>
 const bg = { rock: '#181820', paper: '#2F7D4F', scissors: '#3B1B5E' };
@@ -159,6 +161,14 @@ const img = move => move ? `assets/${move}.png` : '';
 let lastLockId = 0;
 let shownScore = 0;
 let compactTimer = null;
+let lastCountdownWord = null;
+let lastState = null;
+
+function playSound(audio) {
+  audio.volume = 1;
+  audio.currentTime = 0;
+  audio.play().catch(() => {});
+}
 
 async function control(key) {
   await fetch(`/control?key=${encodeURIComponent(key)}`);
@@ -209,7 +219,17 @@ async function tick() {
   const counting = s.state === 'COUNTDOWN';
   scoreGroup.style.display = counting ? 'none' : 'block';
   countdownGroup.style.display = counting ? 'block' : 'none';
-  if (s.countdown_word) countdownText.textContent = s.countdown_word;
+  if (s.countdown_word) {
+    countdownText.textContent = s.countdown_word;
+    if (s.countdown_word !== lastCountdownWord) {
+      lastCountdownWord = s.countdown_word;
+      playSound(rpsBeep);
+    }
+  } else {
+    if (lastState === 'COUNTDOWN' && s.state !== 'COUNTDOWN') playSound(shootBeep);
+    lastCountdownWord = null;
+  }
+  lastState = s.state;
   rockyFist.classList.toggle('counting', counting);
 
   if (s.locked && s.lock_id !== lastLockId) {
