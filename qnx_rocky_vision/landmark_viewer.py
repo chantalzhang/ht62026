@@ -185,10 +185,16 @@ class QnxCameraSource:
                 with self._lock:
                     self._latest_rgb = rgb
 
-        # Keep a reference on self so the CFUNCTYPE closure outlives camera_start_viewfinder.
-        self._viewfinder_cb = camapi["viewfinder_cb_t"](_on_frame)
+        def _on_status(_handle, _status, _ext_status, _arg):
+            pass
 
-        err = self._lib.camera_start_viewfinder(self._handle, self._viewfinder_cb, None, None)
+        # Keep references on self so the CFUNCTYPE closures outlive camera_start_viewfinder.
+        # ctypes on this build won't implicitly convert a bare None into a NULL function
+        # pointer for a CFUNCTYPE argtype, so we pass real no-op callbacks instead of None.
+        self._viewfinder_cb = camapi["viewfinder_cb_t"](_on_frame)
+        self._status_cb = camapi["status_cb_t"](_on_status)
+
+        err = self._lib.camera_start_viewfinder(self._handle, self._viewfinder_cb, self._status_cb, None)
         if err != CAMERA_EOK:
             self._lib.camera_close(self._handle)
             raise RuntimeError(f"camera_start_viewfinder(CAMERA_UNIT_1) failed: err={err}")

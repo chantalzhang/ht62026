@@ -207,6 +207,12 @@ def parse_args():
     parser.add_argument("--min-detection-confidence", type=float, default=0.6)
     parser.add_argument("--min-tracking-confidence", type=float, default=0.5)
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="Bind address. Defaults to 0.0.0.0 so the game is reachable from other "
+        "devices on the network, since the QNX Pi is headless.",
+    )
     return parser.parse_args()
 
 
@@ -214,10 +220,13 @@ def main():
     args = parse_args()
     game = Game(args)
     threading.Thread(target=game.run_vision, daemon=True).start()
-    server = ThreadingHTTPServer(("localhost", args.port), make_handler(game))
-    url = f"http://localhost:{args.port}"
-    print(f"Open {url}")
-    webbrowser.open(url)
+    server = ThreadingHTTPServer((args.host, args.port), make_handler(game))
+    url = f"http://{args.host}:{args.port}"
+    print(f"Serving on {url}")
+    try:
+        webbrowser.open(url)
+    except webbrowser.Error:
+        pass
     while game.running:
         server.handle_request()
 
