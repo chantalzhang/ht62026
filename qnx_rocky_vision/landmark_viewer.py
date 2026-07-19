@@ -70,6 +70,15 @@ CAMERA_FRAMETYPE_BGR8888 = 31
 CAMERA_VFMODE_DEFAULT = 0
 CAMERA_VFMODE_VIDEO = 1
 
+# camera_imgprop_t values used to configure the viewfinder before starting it.
+# camera_set_vf_property() is actually a header macro:
+#   #define camera_set_vf_property(handle, args...) \
+#       camera_private_set_vf_property(handle, args, CAMERA_IMGPROP_END)
+# so calling the real exported symbol via ctypes requires appending the
+# CAMERA_IMGPROP_END sentinel ourselves to terminate the variadic arg list.
+CAMERA_IMGPROP_END = -1
+CAMERA_IMGPROP_CREATEWINDOW = 19
+
 _camapi = None
 
 
@@ -112,6 +121,11 @@ def _load_camapi():
         ctypes.POINTER(ctypes.c_int32),
     ]
     lib.camera_get_supported_vf_modes.restype = ctypes.c_int32
+    # camera_private_set_vf_property is the real symbol behind the
+    # camera_set_vf_property() variadic macro; deliberately left without
+    # fixed argtypes since the property/value pairs it takes vary in count
+    # and type (int, double, char*) depending on which properties are set.
+    lib.camera_private_set_vf_property.restype = ctypes.c_int32
     lib.camera_start_viewfinder.argtypes = [ctypes.c_int32, viewfinder_cb_t, status_cb_t, ctypes.c_void_p]
     lib.camera_start_viewfinder.restype = ctypes.c_int32
     lib.camera_stop_viewfinder.argtypes = [ctypes.c_int32]
@@ -231,6 +245,17 @@ class QnxCameraSource:
         if err != CAMERA_EOK:
             self._lib.camera_close(self._handle)
             raise RuntimeError(f"camera_set_vf_mode({vf_mode}) failed: err={err}")
+
+        # By default the Sensor Framework auto-creates a Screen viewfinder
+        # window as a side effect of camera_start_viewfinder(). We're headless
+        # (no Screen/graphics context in this process), so that auto-created
+        # window is almost certainly what segfaults -- disable it explicitly.
+        err = self._lib.camera_private_set_vf_property(
+            self._handle, CAMERA_IMGPROP_CREATEWINDOW, 0, CAMERA_IMGPROP_END
+        )
+        if err != CAMERA_EOK:
+            self._lib.camera_close(self._handle)
+            raise RuntimeError(f"camera_set_vf_property(CREATEWINDOW=0) failed: err={err}")
 
         self._lock = threading.Lock()
         self._latest_rgb = None

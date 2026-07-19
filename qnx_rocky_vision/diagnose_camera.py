@@ -17,6 +17,8 @@ import traceback
 from qnx_rocky_vision.landmark_viewer import (
     CAMERA_EOK,
     CAMERA_HANDLE_INVALID,
+    CAMERA_IMGPROP_CREATEWINDOW,
+    CAMERA_IMGPROP_END,
     CAMERA_MODE_VIEWFINDER,
     CAMERA_UNIT_1,
     CAMERA_VFMODE_DEFAULT,
@@ -60,6 +62,15 @@ def main():
         log("4", f"err={err}")
         if err != CAMERA_EOK:
             log("4", "FAILED to set vf mode. Stopping here.")
+            return
+
+        log("4b", f"camera_set_vf_property(CREATEWINDOW={CAMERA_IMGPROP_CREATEWINDOW}, 0)...")
+        err = lib.camera_private_set_vf_property(
+            h, CAMERA_IMGPROP_CREATEWINDOW, 0, CAMERA_IMGPROP_END
+        )
+        log("4b", f"err={err}")
+        if err != CAMERA_EOK:
+            log("4b", "FAILED to disable auto-created viewfinder window. Stopping here.")
             return
 
         frames_seen = []
