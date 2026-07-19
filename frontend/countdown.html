@@ -54,27 +54,30 @@
   <div class="ring"></div>
   <div class="shade"></div>
   <div class="text">ENTERING THE RING...</div>
-  <audio id="crowdCheer" src="assets/sounds/crowd_cheering.mp3" preload="auto" autoplay></audio>
+  <audio id="crowdCheer" src="assets/sounds/cheer_in_ring.mp3" preload="auto" autoplay></audio>
 
   <script>
     const maxVolume = 0.65;
-    crowdCheer.volume = maxVolume;
+    crowdCheer.volume = 0;
     crowdCheer.play().catch(() => {});
 
-    setTimeout(() => {
-      const fadeStart = performance.now();
-      const fadeDuration = 1400;
-      function fadeCrowd(now) {
-        const progress = Math.min((now - fadeStart) / fadeDuration, 1);
-        crowdCheer.volume = maxVolume * (1 - progress);
-        if (progress < 1) requestAnimationFrame(fadeCrowd);
+    function fadeVolume(from, to, duration) {
+      const start = performance.now();
+      function step(now) {
+        const progress = Math.min((now - start) / duration, 1);
+        const eased = progress * progress * progress * (progress * (progress * 6 - 15) + 10);
+        crowdCheer.volume = from + (to - from) * eased;
+        if (progress < 1) requestAnimationFrame(step);
       }
-      requestAnimationFrame(fadeCrowd);
-    }, 3000);
+      requestAnimationFrame(step);
+    }
+
+    fadeVolume(0, maxVolume, 2200);
+    setTimeout(() => fadeVolume(maxVolume, 0, 1400), 3400);
 
     setTimeout(() => {
       window.location.href = '/game.html';
-    }, 4600);
+    }, 5000);
   </script>
 </body>
 </html>
