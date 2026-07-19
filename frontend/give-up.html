@@ -70,7 +70,13 @@
     playFinalTheme();
     document.addEventListener('pointerdown', playFinalTheme);
     document.addEventListener('touchstart', playFinalTheme);
-    document.addEventListener('keydown', playFinalTheme);
+    document.addEventListener('keydown', event => {
+      playFinalTheme();
+      if (event.key === ' ') {
+        event.preventDefault();
+        window.location.href = '/landing.html';
+      }
+    });
   </script>
 </body>
 </html>
