@@ -54,11 +54,11 @@
   <div class="ring"></div>
   <div class="shade"></div>
   <div class="text">ENTERING THE RING...</div>
-  <audio id="crowdCheer" src="assets/sounds/crowd_cheering.mp3" preload="auto" autoplay></audio>
+  <audio id="crowdCheer" src="assets/sounds/crowd_cheer.mp3?v=2" preload="auto" autoplay></audio>
 
   <script>
-    const maxVolume = 0.85;
-    crowdCheer.volume = 0;
+    const maxVolume = 1;
+    crowdCheer.volume = maxVolume;
     crowdCheer.play().catch(() => {});
 
     function fadeVolume(from, to, duration) {
@@ -72,7 +72,6 @@
       requestAnimationFrame(step);
     }
 
-    fadeVolume(0, maxVolume, 2200);
     setTimeout(() => fadeVolume(maxVolume, 0, 1400), 3400);
 
     setTimeout(() => {
