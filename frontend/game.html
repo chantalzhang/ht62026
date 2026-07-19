@@ -23,9 +23,13 @@
     .result { font-size: 30px; font-weight: 900; }
     .small { font-size: 21px; font-weight: 900; }
     .rocky-pop { animation: pop 900ms ease-in-out infinite alternate; transform-origin: 325px 390px; }
-    .rocky-pop.counting { animation: bob 650ms ease-in-out infinite alternate; }
+    #rockyFist.counting { animation: rpsPump 740ms ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
     @keyframes pop { from { transform: scale(1) rotate(-1.4deg); } to { transform: scale(1.035) rotate(-.4deg); } }
-    @keyframes bob { from { transform: translateY(-14px) rotate(-1.4deg); } to { transform: translateY(16px) rotate(-.4deg); } }
+    @keyframes rpsPump {
+      0% { transform: translate(-10px, -18px) rotate(-7deg); }
+      50% { transform: translate(16px, 20px) rotate(7deg); }
+      100% { transform: translate(-10px, -18px) rotate(-7deg); }
+    }
   </style>
 </head>
 <body>
@@ -66,8 +70,11 @@
   <g id="rockyCard" class="rocky-pop" filter="url(#shadow)">
     <rect x="55" y="200" width="540" height="440" rx="30" fill="#D94A4A" stroke="#0B0B0B" stroke-width="9"/>
     <text x="325" y="248" text-anchor="middle" class="label" fill="#FFFFFF" stroke="#0B0B0B" stroke-width="6" paint-order="stroke">ROCKY</text>
-    <rect x="145" y="275" width="360" height="275" rx="16" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="5"/>
-    <image href="assets/rocky_fist.png" x="120" y="245" width="410" height="335" preserveAspectRatio="xMidYMid meet" clip-path="url(#rockyFistClip)"/>
+    <rect x="145" y="275" width="360" height="275" rx="16" fill="#FFFFFF"/>
+    <g clip-path="url(#rockyFistClip)">
+      <image id="rockyFist" href="assets/rocky_fist.png" x="120" y="245" width="410" height="335" preserveAspectRatio="xMidYMid meet"/>
+    </g>
+    <rect x="145" y="275" width="360" height="275" rx="16" fill="none" stroke="#FFFFFF" stroke-width="5"/>
     <rect id="resultPill" x="120" y="575" width="410" height="46" rx="16" fill="#EFCB4A" stroke="#0B0B0B" stroke-width="5" style="display:none"/>
     <text id="resultText" x="325" y="608" text-anchor="middle" class="small" fill="#0B0B0B" style="display:none">ROCKY WINS!</text>
   </g>
@@ -111,7 +118,7 @@ async function tick() {
   scoreGroup.style.display = counting ? 'none' : 'block';
   countdownGroup.style.display = counting ? 'block' : 'none';
   if (s.countdown_word) countdownText.textContent = s.countdown_word;
-  rockyCard.classList.toggle('counting', counting);
+  rockyFist.classList.toggle('counting', counting);
 
   if (s.locked) {
     camera.style.display = 'none';
