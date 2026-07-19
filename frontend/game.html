@@ -31,7 +31,8 @@
     #scoreGroup.compact { animation: scoreOut 500ms ease-in forwards; }
     #compactScore { opacity: 0; transform: translateX(-30px); transition: all 500ms ease-out; }
     #endActions { opacity: 0; transform: translateX(30px); transition: all 500ms ease-out; }
-    #giveUpButton { animation: pop 900ms ease-in-out infinite alternate; transform-origin: 1095px 70px; }
+    #shootOverlay, #flashOverlay { pointer-events: none; }
+    #giveUpButton { animation: pop 900ms ease-in-out infinite alternate; transform-origin: 1095px 70px; cursor: pointer; pointer-events: all; }
     #compactScore.show, #endActions.show { opacity: 1; transform: translateX(0); }
     @keyframes pageIn {
       from { opacity: .35; filter: blur(6px); }
@@ -105,7 +106,7 @@
 
   <g id="endActions" filter="url(#shadow)">
     <text x="640" y="78" text-anchor="middle" class="small" fill="#FFFFFF" stroke="#0B0B0B" stroke-width="4" paint-order="stroke">SPACE TO TRY AGAIN</text>
-    <g id="giveUpButton">
+    <g id="giveUpButton" onclick="window.location.href='/give-up.html'">
       <rect x="1015" y="42" width="160" height="56" rx="18" fill="#D94A4A" stroke="#0B0B0B" stroke-width="5"/>
       <text x="1095" y="78" text-anchor="middle" class="small" fill="#FFFFFF" stroke="#0B0B0B" stroke-width="3" paint-order="stroke">GIVE UP</text>
     </g>
@@ -193,6 +194,9 @@ document.addEventListener('keydown', e => {
   if (e.key === 'r') control('r');
   if (e.key === 'c') control('c');
   if (e.key === 'q') control('q');
+});
+giveUpButton.addEventListener('click', () => {
+  window.location.href = '/give-up.html';
 });
 
 async function tick() {
