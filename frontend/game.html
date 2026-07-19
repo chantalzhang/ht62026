@@ -154,6 +154,9 @@
 </svg>
 <audio id="rpsBeep" src="assets/sounds/rps_beep.mp3" preload="auto"></audio>
 <audio id="shootBeep" src="assets/sounds/shoot_beep.mp3" preload="auto"></audio>
+<audio id="yellRock" src="assets/sounds/yell_rock.mp3" preload="auto"></audio>
+<audio id="yellPaper" src="assets/sounds/yell_paper.mp3" preload="auto"></audio>
+<audio id="yellScissors" src="assets/sounds/yell_scissors.mp3" preload="auto"></audio>
 
 <script>
 const bg = { rock: '#181820', paper: '#2F7D4F', scissors: '#3B1B5E' };
@@ -161,8 +164,15 @@ const img = move => move ? `assets/${move}.png` : '';
 let lastLockId = 0;
 let shownScore = 0;
 let compactTimer = null;
+let yellTimer = null;
 let lastCountdownWord = null;
 let lastState = null;
+
+const moveYells = {
+  rock: document.getElementById('yellRock'),
+  paper: document.getElementById('yellPaper'),
+  scissors: document.getElementById('yellScissors'),
+};
 
 function playSound(audio) {
   audio.volume = 1;
@@ -170,11 +180,17 @@ function playSound(audio) {
   audio.play().catch(() => {});
 }
 
+function playMoveYell(move) {
+  const audio = moveYells[move];
+  if (audio) playSound(audio);
+}
+
 async function control(key) {
   await fetch(`/control?key=${encodeURIComponent(key)}`);
 }
 function resetEndUi() {
   clearTimeout(compactTimer);
+  clearTimeout(yellTimer);
   scoreGroup.classList.remove('compact');
   compactScore.classList.remove('show');
   endActions.classList.remove('show');
@@ -200,7 +216,11 @@ function animateScore(newScore) {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.key === ' ') control('space');
+  if (e.repeat) return;
+  if (e.key === ' ') {
+    e.preventDefault();
+    control('space');
+  }
   if (e.key === 'r') control('r');
   if (e.key === 'c') control('c');
   if (e.key === 'q') control('q');
@@ -245,6 +265,7 @@ async function tick() {
     void flashOverlay.getBoundingClientRect();
     flashOverlay.classList.add('play');
     setTimeout(() => shootOverlay.style.display = 'none', 1500);
+    yellTimer = setTimeout(() => playMoveYell(s.rocky_move), 1550);
   }
 
   if (s.locked) {
