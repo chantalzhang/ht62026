@@ -56,5 +56,21 @@
     <div class="main">ROCKY&nbsp;<span class="never">NEVER</span>&nbsp;LOSES</div>
     <div class="bottom">NICE TRY.</div>
   </main>
+  <audio id="finalTheme" src="assets/sounds/final_theme.mp3" preload="auto" autoplay loop playsinline></audio>
+
+  <script>
+    const finalTheme = document.getElementById('finalTheme');
+    finalTheme.volume = 0.85;
+
+    function playFinalTheme() {
+      finalTheme.muted = false;
+      finalTheme.play().catch(() => {});
+    }
+
+    playFinalTheme();
+    document.addEventListener('pointerdown', playFinalTheme);
+    document.addEventListener('touchstart', playFinalTheme);
+    document.addEventListener('keydown', playFinalTheme);
+  </script>
 </body>
 </html>

@@ -122,9 +122,26 @@
     </div>
   </main>
 
+  <audio id="landingTheme" src="assets/sounds/landing_theme.mp3" preload="auto" autoplay loop playsinline></audio>
+
   <script>
+    const landingTheme = document.getElementById('landingTheme');
+    landingTheme.volume = 0.85;
+
+    function playLandingTheme() {
+      landingTheme.muted = false;
+      landingTheme.play().catch(() => {});
+    }
+
+    playLandingTheme();
+    document.addEventListener('pointerdown', playLandingTheme);
+    document.addEventListener('touchstart', playLandingTheme);
     document.addEventListener('keydown', event => {
-      if (event.key === ' ') window.location.href = '/countdown.html';
+      playLandingTheme();
+      if (event.key === ' ') {
+        event.preventDefault();
+        window.location.href = '/countdown.html';
+      }
     });
   </script>
 </body>
