@@ -32,6 +32,8 @@ class Game:
         self.score = 0
         self.gesture = UNKNOWN
         self.frame_jpg = None
+        self.locked_frame_jpg = None
+        self.lock_id = 0
         self.running = True
 
     def state(self):
@@ -49,6 +51,7 @@ class Game:
                 "rocky_move": rocky,
                 "result": result_text(locked, rocky),
                 "score": self.score,
+                "lock_id": self.lock_id,
             }
 
     def countdown_word(self):
@@ -72,10 +75,12 @@ class Game:
             if key == "space":
                 self.armed = False
                 self.countdown_start = time.monotonic()
+                self.locked_frame_jpg = None
                 self.stabilizer.reset()
             elif key == "r":
                 self.armed = False
                 self.countdown_start = None
+                self.locked_frame_jpg = None
                 self.stabilizer.reset()
             elif key == "c":
                 self.score = 0
@@ -105,6 +110,9 @@ class Game:
                     gesture = classify_rps(hand)
                     mp_drawing.draw_landmarks(frame, hand, mp_hands.HAND_CONNECTIONS)
 
+                ok, jpg = cv2.imencode(".jpg", frame)
+                frame_bytes = jpg.tobytes() if ok else None
+
                 with self.lock:
                     self.gesture = gesture
                     self.update_countdown()
@@ -113,11 +121,10 @@ class Game:
                         locked = self.stabilizer.update(gesture)
                         if locked:
                             self.score += 1
-
-                ok, jpg = cv2.imencode(".jpg", frame)
-                if ok:
-                    with self.lock:
-                        self.frame_jpg = jpg.tobytes()
+                            self.lock_id += 1
+                            self.locked_frame_jpg = frame_bytes
+                    if frame_bytes:
+                        self.frame_jpg = frame_bytes
 
         camera.close()
 
@@ -146,6 +153,21 @@ def make_handler(game):
                 game.control(key)
                 self.send_response(204)
                 self.end_headers()
+                return
+
+            if parsed.path == "/locked_frame":
+                with game.lock:
+                    frame = game.locked_frame_jpg
+                if not frame:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(frame)))
+                self.end_headers()
+                self.wfile.write(frame)
                 return
 
             if parsed.path == "/video":
