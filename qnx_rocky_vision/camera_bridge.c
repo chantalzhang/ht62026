@@ -299,12 +299,23 @@ static void viewfinder_callback(camera_handle_t handle, camera_buffer_t *buf, vo
 static void status_callback(camera_handle_t handle, camera_devstatus_t status, uint16_t ext_status, void *arg) {
     (void)handle;
     (void)arg;
-    fprintf(stderr, "camera_bridge: status callback: status=%d ext_status=%u\n", status, ext_status);
+    fprintf(stderr,
+            "camera_bridge: status callback: status=%d ext_status=%u "
+            "(VIDEOVF=%d VIEWFINDER_ACTIVE=%d VIDEO_RESUME=%d MM_ERROR=%d NOSPACE_ERROR=%d)\n",
+            status, ext_status, CAMERA_STATUS_VIDEOVF, CAMERA_STATUS_VIEWFINDER_ACTIVE,
+            CAMERA_STATUS_VIDEO_RESUME, CAMERA_STATUS_MM_ERROR, CAMERA_STATUS_NOSPACE_ERROR);
 }
 
 int main(void) {
     camera_handle_t handle = CAMERA_HANDLE_INVALID;
     camera_error_t err;
+
+    /* Force stderr fully unbuffered: `timeout` kills us with a raw SIGTERM
+     * (no flush-on-exit), so if stderr were block-buffered (which can
+     * happen once it's redirected to a regular file instead of a tty), any
+     * not-yet-flushed diagnostic lines from the viewfinder callback would
+     * be silently lost right when we need them most. */
+    setvbuf(stderr, NULL, _IONBF, 0);
 
     /* CAMERA_MODE_ROLL ("access to the camera roll") is included here to
      * match QNX's own reference MediaPipe camera sink sample exactly
