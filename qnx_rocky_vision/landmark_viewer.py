@@ -214,10 +214,23 @@ class QnxCameraSource:
 
         # Must select a viewfinder mode before starting the viewfinder, otherwise
         # the datapath is left unconfigured and camera_start_viewfinder segfaults.
-        err = self._lib.camera_set_vf_mode(self._handle, CAMERA_VFMODE_VIDEO)
+        # This camera/BSP doesn't necessarily support the standard camera_vfmode_t
+        # values (e.g. CAMERA_VFMODE_VIDEO) -- some Raspberry Pi camera BSPs add
+        # their own vendor-specific mode values -- so pick whichever non-default
+        # mode camera_get_supported_vf_modes() actually reports instead of
+        # hardcoding one.
+        supported_modes = get_supported_vf_modes(self._handle)
+        vf_mode = next((m for m in supported_modes if m != CAMERA_VFMODE_DEFAULT), None)
+        if vf_mode is None:
+            self._lib.camera_close(self._handle)
+            raise RuntimeError(
+                f"Camera reports no non-default viewfinder mode (supported={supported_modes})"
+            )
+
+        err = self._lib.camera_set_vf_mode(self._handle, vf_mode)
         if err != CAMERA_EOK:
             self._lib.camera_close(self._handle)
-            raise RuntimeError(f"camera_set_vf_mode(CAMERA_VFMODE_VIDEO) failed: err={err}")
+            raise RuntimeError(f"camera_set_vf_mode({vf_mode}) failed: err={err}")
 
         self._lock = threading.Lock()
         self._latest_rgb = None
