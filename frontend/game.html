@@ -157,6 +157,14 @@
 <audio id="yellRock" src="assets/sounds/yell_rock.mp3" preload="auto"></audio>
 <audio id="yellPaper" src="assets/sounds/yell_paper.mp3" preload="auto"></audio>
 <audio id="yellScissors" src="assets/sounds/yell_scissors.mp3" preload="auto"></audio>
+<audio id="taunt1" src="assets/sounds/rocky_taunt_1.mp3" preload="auto"></audio>
+<audio id="taunt2" src="assets/sounds/rocky_taunt_2.mp3" preload="auto"></audio>
+<audio id="taunt3" src="assets/sounds/rocky_taunt_3.mp3" preload="auto"></audio>
+<audio id="taunt4" src="assets/sounds/rocky_taunt_4.mp3" preload="auto"></audio>
+<audio id="taunt5" src="assets/sounds/rocky_taunt_5.mp3" preload="auto"></audio>
+<audio id="taunt6" src="assets/sounds/rocky_taunt_6.mp3" preload="auto"></audio>
+<audio id="taunt7" src="assets/sounds/rocky_taunt_7.mp3" preload="auto"></audio>
+<audio id="taunt8" src="assets/sounds/rocky_taunt_8.mp3" preload="auto"></audio>
 
 <script>
 const bg = { rock: '#181820', paper: '#2F7D4F', scissors: '#3B1B5E' };
@@ -165,7 +173,10 @@ let lastLockId = 0;
 let shownScore = 0;
 let compactTimer = null;
 let yellTimer = null;
+let tauntTimer = null;
 let lastCountdownWord = null;
+let tauntBag = [];
+let playedWinnerTaunt = false;
 let lastState = null;
 
 const moveYells = {
@@ -173,6 +184,8 @@ const moveYells = {
   paper: document.getElementById('yellPaper'),
   scissors: document.getElementById('yellScissors'),
 };
+const firstTaunt = taunt6;
+const rockyTaunts = [taunt1, taunt2, taunt3, taunt4, taunt5, taunt7, taunt8];
 
 function playSound(audio) {
   audio.volume = 1;
@@ -185,12 +198,23 @@ function playMoveYell(move) {
   if (audio) playSound(audio);
 }
 
+function playRockyTaunt() {
+  if (!playedWinnerTaunt) {
+    playedWinnerTaunt = true;
+    playSound(firstTaunt);
+    return;
+  }
+  if (!tauntBag.length) tauntBag = [...rockyTaunts].sort(() => Math.random() - 0.5);
+  playSound(tauntBag.pop());
+}
+
 async function control(key) {
   await fetch(`/control?key=${encodeURIComponent(key)}`);
 }
 function resetEndUi() {
   clearTimeout(compactTimer);
   clearTimeout(yellTimer);
+  clearTimeout(tauntTimer);
   scoreGroup.classList.remove('compact');
   compactScore.classList.remove('show');
   endActions.classList.remove('show');
@@ -266,6 +290,7 @@ async function tick() {
     flashOverlay.classList.add('play');
     setTimeout(() => shootOverlay.style.display = 'none', 1500);
     yellTimer = setTimeout(() => playMoveYell(s.rocky_move), 1550);
+    tauntTimer = setTimeout(playRockyTaunt, 2450);
   }
 
   if (s.locked) {
