@@ -5,20 +5,34 @@
  *
  * Why this exists: invoking a ctypes callback from a thread libcamapi
  * creates internally (i.e. not a thread Python itself spawned) reliably
- * segfaults this QNX Python 3.14 build. Plain C has no such problem --
- * camera_example1_callback (shipped with the OS) already proves native
- * callback-mode capture works fine on this hardware. So this helper does
- * the camera_open/camera_start_viewfinder callback dance AND the pixel
- * format conversion in pure C, and just pipes ready-to-use RGB24 frames to
- * Python over stdout, which Python reads with ordinary blocking I/O (no
- * native callback involved on the Python side at all).
+ * segfaults this QNX Python 3.14 build. Plain C has no such problem, so this
+ * helper does the camera_open/camera_start_viewfinder callback dance AND the
+ * pixel format conversion in pure C, and just pipes ready-to-use RGB24
+ * frames to Python over stdout, which Python reads with ordinary blocking
+ * I/O (no native callback involved on the Python side at all).
  *
- * All pixel-format handling lives here instead of in Python so that:
- *   (a) it can be compiled directly against the real camera_defs.h headers
- *       on the target (no guessing enum values or struct layouts by hand),
- *       in particular the confirmed real camera_frame_nv12_t layout, and
- *   (b) Python's side of the protocol never has to branch on frame type at
- *       all -- it just gets ready-to-display RGB24 rows.
+ * The camera_open/camera_start_viewfinder sequence below deliberately
+ * mirrors QNX's own camera_example1_callback sample as closely as possible
+ * (https://gitlab.com/qnx/projects/camera-projects/applications/camera_example1_callback),
+ * since that exact tool is independently confirmed to stream real frames on
+ * this hardware. Notably, that sample opens with CAMERA_MODE_RO alone and
+ * never calls camera_set_vf_mode()/camera_set_vf_property() at all before
+ * camera_start_viewfinder() -- so neither do we. (An earlier version of
+ * this file added those calls based on an assumption inherited from the
+ * ctypes-era crash investigation, plus a MediaPipe-focused reference doc;
+ * neither is as directly authoritative as a tool proven to work on this
+ * exact board, so we defer to the simpler, proven sequence instead.)
+ *
+ * Similarly, the per-frametype struct field names used below (e.g.
+ * `framedesc.rgb8888.width`) are copied directly from that same proven
+ * source rather than guessed from raw byte offsets, for every frame type it
+ * supports. NV12 isn't handled by that sample, but its struct
+ * (camera_frame_nv12_t: height, width, stride, uv_offset, uv_stride) is
+ * separately confirmed from QNX's official MediaPipe camera-sink codelab.
+ *
+ * All pixel-format handling lives here instead of in Python so that Python
+ * never has to branch on frame type at all -- it just gets ready-to-display
+ * RGB24 rows.
  *
  * Wire format, written to stdout once per frame:
  *   char     magic[4]     ("QCF1")
@@ -33,8 +47,8 @@
  *   list installed variants and substitute the right aarch64 one)
  *
  * Run standalone (for testing):
- *   timeout 3 ./camera_bridge > /tmp/test_frames.bin
- *   ls -la /tmp/test_frames.bin
+ *   timeout 8 ./camera_bridge > /tmp/test_frames.bin 2> /tmp/test_stderr.txt
+ *   cat /tmp/test_stderr.txt; ls -la /tmp/test_frames.bin
  */
 
 #include <camera/camera_api.h>
@@ -155,9 +169,9 @@ static void convert_yuv422(const uint8_t *framebuf, uint32_t height, uint32_t wi
 /* NV12: semi-planar 4:2:0 -- one full-resolution Y plane, followed (at
  * uv_offset bytes into the same buffer) by a half-resolution plane of
  * interleaved U,V byte pairs. BT.601 coefficients. This is the format
- * camera1 is actually configured for on this hardware (camera_module3.conf
+ * camera1 is actually configured for on this hardware (rpi5_camera_module3.conf
  * sets default_video_format = nv12), and camera_frame_nv12_t's layout is
- * confirmed directly from the real header, unlike the other formats above. */
+ * confirmed directly from QNX's official MediaPipe camera-sink codelab. */
 static void convert_nv12(const uint8_t *framebuf, uint32_t height, uint32_t width,
                           uint32_t y_stride, int64_t uv_offset, int64_t uv_stride,
                           uint8_t *out) {
@@ -193,94 +207,86 @@ static void viewfinder_callback(camera_handle_t handle, camera_buffer_t *buf, vo
     (void)handle;
     (void)arg;
 
-    uint32_t height = 0, width = 0;
+    uint32_t height = 0, width = 0, stride = 0;
     uint8_t *rgb;
     int should_log = g_callbacks_logged < MAX_CALLBACKS_LOGGED;
     if (should_log) {
         g_callbacks_logged++;
-        fprintf(stderr,
-                "camera_bridge: callback fired #%d: frametype=%d (NV12=%d, RGB8888=%d, "
-                "BGR8888=%d, YCBYCR=%d, CBYCRY=%d) framesize=%llu\n",
-                g_callbacks_logged, buf->frametype, CAMERA_FRAMETYPE_NV12,
-                CAMERA_FRAMETYPE_RGB8888, CAMERA_FRAMETYPE_BGR8888, CAMERA_FRAMETYPE_YCBYCR,
-                CAMERA_FRAMETYPE_CBYCRY, (unsigned long long)buf->framesize);
+        fprintf(stderr, "camera_bridge: callback fired #%d: frametype=%d framesize=%llu\n",
+                g_callbacks_logged, buf->frametype, (unsigned long long)buf->framesize);
     }
 
-    if (buf->frametype == CAMERA_FRAMETYPE_NV12) {
+    /* Struct field names below (e.g. .rgb8888, .ycbycr) are copied verbatim
+     * from QNX's own camera_example1_callback.c, which uses exactly these
+     * union members for exactly these frame types on this same hardware. */
+    switch (buf->frametype) {
+    case CAMERA_FRAMETYPE_RGB8888:
+        height = buf->framedesc.rgb8888.height;
+        width = buf->framedesc.rgb8888.width;
+        stride = buf->framedesc.rgb8888.stride;
+        break;
+    case CAMERA_FRAMETYPE_BGR8888:
+        height = buf->framedesc.bgr8888.height;
+        width = buf->framedesc.bgr8888.width;
+        stride = buf->framedesc.bgr8888.stride;
+        break;
+    case CAMERA_FRAMETYPE_YCBYCR:
+        height = buf->framedesc.ycbycr.height;
+        width = buf->framedesc.ycbycr.width;
+        stride = buf->framedesc.ycbycr.stride;
+        break;
+    case CAMERA_FRAMETYPE_CBYCRY:
+        height = buf->framedesc.cbycry.height;
+        width = buf->framedesc.cbycry.width;
+        stride = buf->framedesc.cbycry.stride;
+        break;
+    case CAMERA_FRAMETYPE_NV12:
         height = buf->framedesc.nv12.height;
         width = buf->framedesc.nv12.width;
+        stride = buf->framedesc.nv12.stride;
+        break;
+    default:
         if (should_log) {
-            fprintf(stderr,
-                    "camera_bridge:   nv12 framedesc: height=%u width=%u stride=%u "
-                    "uv_offset=%lld uv_stride=%lld\n",
-                    height, width, buf->framedesc.nv12.stride,
-                    (long long)buf->framedesc.nv12.uv_offset,
-                    (long long)buf->framedesc.nv12.uv_stride);
+            fprintf(stderr, "camera_bridge:   dropping unsupported frametype=%d\n", buf->frametype);
         }
-        if (height == 0 || width == 0) {
-            if (should_log) {
-                fprintf(stderr, "camera_bridge:   dropping frame: zero height/width\n");
-            }
-            return;
-        }
-        rgb = get_rgb_buffer((size_t)height * width * 3);
-        if (!rgb) {
-            fprintf(stderr, "camera_bridge: out of memory for RGB buffer\n");
-            return;
-        }
-        convert_nv12(buf->framebuf, height, width, buf->framedesc.nv12.stride,
-                     buf->framedesc.nv12.uv_offset, buf->framedesc.nv12.uv_stride, rgb);
-    } else {
-        /* Fallback for other frame types: we don't have a confirmed struct
-         * layout for these on this BSP (unlike NV12 above), so assume
-         * framedesc's first three uint32_t fields are height, width, stride
-         * in that order -- matches camera_frame_nv12_t's own leading fields,
-         * so it's a reasonable bet, but has not been directly confirmed. */
-        const uint8_t *desc = (const uint8_t *)&buf->framedesc;
-        uint32_t stride = 0;
-        memcpy(&height, desc + 0, sizeof(uint32_t));
-        memcpy(&width, desc + sizeof(uint32_t), sizeof(uint32_t));
-        memcpy(&stride, desc + 2 * sizeof(uint32_t), sizeof(uint32_t));
+        return;
+    }
+
+    if (should_log) {
+        fprintf(stderr, "camera_bridge:   height=%u width=%u stride=%u\n", height, width, stride);
+    }
+    if (height == 0 || width == 0 || stride == 0) {
         if (should_log) {
-            fprintf(stderr,
-                    "camera_bridge:   guessed framedesc (first 3 uint32s): height=%u width=%u "
-                    "stride=%u; first 32 raw bytes:",
-                    height, width, stride);
-            for (int i = 0; i < 32; i++) {
-                fprintf(stderr, " %02x", desc[i]);
-            }
-            fprintf(stderr, "\n");
+            fprintf(stderr, "camera_bridge:   dropping frame: zero height/width/stride\n");
         }
-        if (height == 0 || width == 0 || stride == 0) {
-            if (should_log) {
-                fprintf(stderr, "camera_bridge:   dropping frame: zero height/width/stride\n");
-            }
-            return;
-        }
+        return;
+    }
 
-        rgb = get_rgb_buffer((size_t)height * width * 3);
-        if (!rgb) {
-            fprintf(stderr, "camera_bridge: out of memory for RGB buffer\n");
-            return;
-        }
+    rgb = get_rgb_buffer((size_t)height * width * 3);
+    if (!rgb) {
+        fprintf(stderr, "camera_bridge: out of memory for RGB buffer\n");
+        return;
+    }
 
-        switch (buf->frametype) {
-        case CAMERA_FRAMETYPE_RGB8888:
-            convert_packed_rgb(buf->framebuf, height, width, stride, 0, rgb);
-            break;
-        case CAMERA_FRAMETYPE_BGR8888:
-            convert_packed_rgb(buf->framebuf, height, width, stride, 1, rgb);
-            break;
-        case CAMERA_FRAMETYPE_YCBYCR:
-            convert_yuv422(buf->framebuf, height, width, stride, 0, rgb);
-            break;
-        case CAMERA_FRAMETYPE_CBYCRY:
-            convert_yuv422(buf->framebuf, height, width, stride, 1, rgb);
-            break;
-        default:
-            fprintf(stderr, "camera_bridge: dropping unsupported frametype=%d\n", buf->frametype);
-            return;
-        }
+    switch (buf->frametype) {
+    case CAMERA_FRAMETYPE_RGB8888:
+        convert_packed_rgb(buf->framebuf, height, width, stride, 0, rgb);
+        break;
+    case CAMERA_FRAMETYPE_BGR8888:
+        convert_packed_rgb(buf->framebuf, height, width, stride, 1, rgb);
+        break;
+    case CAMERA_FRAMETYPE_YCBYCR:
+        convert_yuv422(buf->framebuf, height, width, stride, 0, rgb);
+        break;
+    case CAMERA_FRAMETYPE_CBYCRY:
+        convert_yuv422(buf->framebuf, height, width, stride, 1, rgb);
+        break;
+    case CAMERA_FRAMETYPE_NV12:
+        convert_nv12(buf->framebuf, height, width, stride, buf->framedesc.nv12.uv_offset,
+                     buf->framedesc.nv12.uv_stride, rgb);
+        break;
+    default:
+        return; /* unreachable: already handled above */
     }
 
     frame_header_t header;
@@ -293,17 +299,13 @@ static void viewfinder_callback(camera_handle_t handle, camera_buffer_t *buf, vo
 }
 
 /* Reports viewfinder lifecycle events independent of whether any frame
- * callback ever fires -- e.g. if we see CAMERA_STATUS_VIEWFINDER_ACTIVE but
- * no frame callback, the datapath itself (sensor service / config) is the
- * problem, not this program's frame handling. */
+ * callback ever fires. camera_example1_callback.c doesn't install a status
+ * callback at all (it passes NULL); we keep ours purely for visibility
+ * while we're still confirming frames flow end-to-end. */
 static void status_callback(camera_handle_t handle, camera_devstatus_t status, uint16_t ext_status, void *arg) {
     (void)handle;
     (void)arg;
-    fprintf(stderr,
-            "camera_bridge: status callback: status=%d ext_status=%u "
-            "(VIDEOVF=%d VIEWFINDER_ACTIVE=%d VIDEO_RESUME=%d MM_ERROR=%d NOSPACE_ERROR=%d)\n",
-            status, ext_status, CAMERA_STATUS_VIDEOVF, CAMERA_STATUS_VIEWFINDER_ACTIVE,
-            CAMERA_STATUS_VIDEO_RESUME, CAMERA_STATUS_MM_ERROR, CAMERA_STATUS_NOSPACE_ERROR);
+    fprintf(stderr, "camera_bridge: status callback: status=%d ext_status=%u\n", status, ext_status);
 }
 
 int main(void) {
@@ -317,15 +319,12 @@ int main(void) {
      * be silently lost right when we need them most. */
     setvbuf(stderr, NULL, _IONBF, 0);
 
-    /* CAMERA_MODE_ROLL ("access to the camera roll") is included here to
-     * match QNX's own reference MediaPipe camera sink sample exactly
-     * (camera_open(unit, CAMERA_MODE_RO | CAMERA_MODE_ROLL | CAMERA_MODE_PWRITE, ...)),
-     * since camera_open succeeding without it previously still resulted in
-     * camera_start_viewfinder never delivering a single frame callback. */
-    err = camera_open(
-        CAMERA_UNIT_1,
-        CAMERA_MODE_PREAD | CAMERA_MODE_PWRITE | CAMERA_MODE_DREAD | CAMERA_MODE_ROLL,
-        &handle);
+    /* Deliberately minimal, matching camera_example1_callback.c exactly:
+     * CAMERA_MODE_RO only (no PWRITE/ROLL), and no camera_set_vf_mode() or
+     * camera_set_vf_property() calls of any kind before starting the
+     * viewfinder. That tool is independently confirmed to stream real
+     * frames on this exact hardware using only this sequence. */
+    err = camera_open(CAMERA_UNIT_1, CAMERA_MODE_RO, &handle);
     if (err != CAMERA_EOK) {
         fprintf(stderr, "camera_bridge: camera_open failed: err=%d\n", err);
         return 1;
@@ -333,41 +332,9 @@ int main(void) {
     fprintf(stderr, "camera_bridge: camera_open OK, handle=%d\n", handle);
 
     {
-        unsigned int num_modes = 0;
-        camera_get_supported_vf_modes(handle, 0, &num_modes, NULL);
-        camera_vfmode_t modes[16];
-        if (num_modes > 16) {
-            num_modes = 16;
-        }
-        camera_get_supported_vf_modes(handle, num_modes, &num_modes, modes);
-        fprintf(stderr, "camera_bridge: supported vf modes (%u):", num_modes);
-        for (unsigned int i = 0; i < num_modes; i++) {
-            fprintf(stderr, " %d", modes[i]);
-        }
-        fprintf(stderr, " (CAMERA_VFMODE_VIDEO=%d)\n", CAMERA_VFMODE_VIDEO);
-    }
-
-    err = camera_set_vf_mode(handle, CAMERA_VFMODE_VIDEO);
-    if (err != CAMERA_EOK) {
-        fprintf(stderr, "camera_bridge: camera_set_vf_mode failed: err=%d\n", err);
-        camera_close(handle);
-        return 1;
-    }
-
-    err = camera_set_vf_property(handle, CAMERA_IMGPROP_CREATEWINDOW, 0);
-    if (err != CAMERA_EOK) {
-        fprintf(stderr, "camera_bridge: camera_set_vf_property(CREATEWINDOW) failed: err=%d\n", err);
-        camera_close(handle);
-        return 1;
-    }
-
-    {
         camera_frametype_t configured_frametype = CAMERA_FRAMETYPE_UNSPECIFIED;
         err = camera_get_vf_property(handle, CAMERA_IMGPROP_FORMAT, &configured_frametype);
-        fprintf(stderr,
-                "camera_bridge: configured vf frametype=%d (err=%d; NV12=%d YCBYCR=%d RGB8888=%d)\n",
-                configured_frametype, err, CAMERA_FRAMETYPE_NV12, CAMERA_FRAMETYPE_YCBYCR,
-                CAMERA_FRAMETYPE_RGB8888);
+        fprintf(stderr, "camera_bridge: configured vf frametype=%d (err=%d)\n", configured_frametype, err);
     }
 
     err = camera_start_viewfinder(handle, viewfinder_callback, status_callback, NULL);
