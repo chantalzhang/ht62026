@@ -60,6 +60,12 @@ CAMERA_FRAMETYPE_CBYCRY = 8
 CAMERA_FRAMETYPE_YCBYCR = 14
 CAMERA_FRAMETYPE_BGR8888 = 31
 
+# camera_vfmode_t: a viewfinder mode must be selected with camera_set_vf_mode()
+# before camera_start_viewfinder() is called, or the datapath is left
+# unconfigured (this reliably segfaults inside camera_start_viewfinder).
+CAMERA_VFMODE_DEFAULT = 0
+CAMERA_VFMODE_VIDEO = 1
+
 _camapi = None
 
 
@@ -93,6 +99,8 @@ def _load_camapi():
     lib.camera_open.restype = ctypes.c_int32
     lib.camera_close.argtypes = [ctypes.c_int32]
     lib.camera_close.restype = ctypes.c_int32
+    lib.camera_set_vf_mode.argtypes = [ctypes.c_int32, ctypes.c_int32]
+    lib.camera_set_vf_mode.restype = ctypes.c_int32
     lib.camera_start_viewfinder.argtypes = [ctypes.c_int32, viewfinder_cb_t, status_cb_t, ctypes.c_void_p]
     lib.camera_start_viewfinder.restype = ctypes.c_int32
     lib.camera_stop_viewfinder.argtypes = [ctypes.c_int32]
@@ -172,6 +180,13 @@ class QnxCameraSource:
         if err != CAMERA_EOK or handle.value == CAMERA_HANDLE_INVALID:
             raise RuntimeError(f"camera_open(CAMERA_UNIT_1) failed: err={err}")
         self._handle = handle.value
+
+        # Must select a viewfinder mode before starting the viewfinder, otherwise
+        # the datapath is left unconfigured and camera_start_viewfinder segfaults.
+        err = self._lib.camera_set_vf_mode(self._handle, CAMERA_VFMODE_VIDEO)
+        if err != CAMERA_EOK:
+            self._lib.camera_close(self._handle)
+            raise RuntimeError(f"camera_set_vf_mode(CAMERA_VFMODE_VIDEO) failed: err={err}")
 
         self._lock = threading.Lock()
         self._latest_rgb = None
