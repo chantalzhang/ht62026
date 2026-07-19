@@ -23,7 +23,9 @@
     .result { font-size: 30px; font-weight: 900; }
     .small { font-size: 21px; font-weight: 900; }
     .rocky-pop { animation: pop 900ms ease-in-out infinite alternate; transform-origin: 325px 390px; }
+    .rocky-pop.counting { animation: bob 650ms ease-in-out infinite alternate; }
     @keyframes pop { from { transform: scale(1) rotate(-1.4deg); } to { transform: scale(1.035) rotate(-.4deg); } }
+    @keyframes bob { from { transform: translateY(-14px) rotate(-1.4deg); } to { transform: translateY(16px) rotate(-.4deg); } }
   </style>
 </head>
 <body>
@@ -45,7 +47,7 @@
   <rect x="0" y="0" width="1280" height="430" fill="#D8CEC0" opacity="0.12"/>
   <rect width="1280" height="720" fill="#000000" opacity="0.12"/>
 
-  <g filter="url(#shadow)">
+  <g id="scoreGroup" filter="url(#shadow)">
     <path d="M165 34 L545 26 L570 112 L190 122 Z" fill="#D94A4A" stroke="#0B0B0B" stroke-width="8"/>
     <path d="M735 26 L1115 34 L1090 122 L710 112 Z" fill="#3F7FCB" stroke="#0B0B0B" stroke-width="8"/>
     <path d="M548 42 L732 42 L710 102 L570 102 Z" fill="#EFCB4A" stroke="#0B0B0B" stroke-width="7"/>
@@ -56,7 +58,12 @@
     <text x="1010" y="95" text-anchor="middle" class="score" fill="#FFFFFF" stroke="#0B0B0B" stroke-width="6" paint-order="stroke">00</text>
   </g>
 
-  <g class="rocky-pop" filter="url(#shadow)">
+  <g id="countdownGroup" filter="url(#shadow)" style="display:none">
+    <path d="M360 30 L920 30 L955 104 L892 128 L390 128 L325 94 Z" fill="#EFCB4A" stroke="#0B0B0B" stroke-width="8"/>
+    <text id="countdownText" x="640" y="95" text-anchor="middle" class="score" fill="#0B0B0B">ROCK</text>
+  </g>
+
+  <g id="rockyCard" class="rocky-pop" filter="url(#shadow)">
     <rect x="55" y="200" width="540" height="440" rx="30" fill="#D94A4A" stroke="#0B0B0B" stroke-width="9"/>
     <text x="325" y="248" text-anchor="middle" class="label" fill="#FFFFFF" stroke="#0B0B0B" stroke-width="6" paint-order="stroke">ROCKY</text>
     <rect x="145" y="275" width="360" height="275" rx="16" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="5"/>
@@ -100,6 +107,12 @@ async function tick() {
   const s = await fetch('/state').then(r => r.json());
   score.textContent = String(s.score).padStart(2, '0');
 
+  const counting = s.state === 'COUNTDOWN';
+  scoreGroup.style.display = counting ? 'none' : 'block';
+  countdownGroup.style.display = counting ? 'block' : 'none';
+  if (s.countdown_word) countdownText.textContent = s.countdown_word;
+  rockyCard.classList.toggle('counting', counting);
+
   if (s.locked) {
     camera.style.display = 'none';
     youMove.style.display = 'block';
@@ -117,7 +130,7 @@ async function tick() {
 
     resultPill.style.display = 'none';
     resultText.style.display = 'none';
-    youText.textContent = s.state === 'ARMED' ? `STABLE: ${s.stable}` : 'PRESS SPACE';
+    youText.textContent = counting ? s.countdown_word : s.state === 'ARMED' ? `STABLE: ${s.stable}` : 'PRESS SPACE';
   }
 }
 
