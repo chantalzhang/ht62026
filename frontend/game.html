@@ -106,7 +106,7 @@
 
   <g id="endActions" filter="url(#shadow)">
     <text x="640" y="78" text-anchor="middle" class="small" fill="#FFFFFF" stroke="#0B0B0B" stroke-width="4" paint-order="stroke">SPACE TO TRY AGAIN</text>
-    <g id="giveUpButton" onclick="window.location.href='/give-up.html'">
+    <g id="giveUpButton" onclick="window.location.href='/white-flag.html'">
       <rect x="1015" y="42" width="160" height="56" rx="18" fill="#D94A4A" stroke="#0B0B0B" stroke-width="5"/>
       <text x="1095" y="78" text-anchor="middle" class="small" fill="#FFFFFF" stroke="#0B0B0B" stroke-width="3" paint-order="stroke">GIVE UP</text>
     </g>
@@ -196,7 +196,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'q') control('q');
 });
 giveUpButton.addEventListener('click', () => {
-  window.location.href = '/give-up.html';
+  window.location.href = '/white-flag.html';
 });
 
 async function tick() {
