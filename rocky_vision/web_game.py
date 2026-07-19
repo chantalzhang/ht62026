@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 import cv2
 import mediapipe as mp
 
+from rocky_vision import pi_client
 from rocky_vision.gesture_classifier import UNKNOWN, classify_rps
 from rocky_vision.landmark_viewer import OpenCVCamera, PiCamera2Source
 from rocky_vision.rps import counter_move, result_text
@@ -35,6 +36,7 @@ class Game:
         self.locked_frame_jpg = None
         self.lock_id = 0
         self.running = True
+        self.last_rocky_move = None
 
     def state(self):
         with self.lock:
@@ -73,11 +75,13 @@ class Game:
     def control(self, key):
         with self.lock:
             if key == "space":
+                self._reset_pi_move()
                 self.armed = False
                 self.countdown_start = time.monotonic()
                 self.locked_frame_jpg = None
                 self.stabilizer.reset()
             elif key == "r":
+                self._reset_pi_move()
                 self.armed = False
                 self.countdown_start = None
                 self.locked_frame_jpg = None
@@ -86,6 +90,12 @@ class Game:
                 self.score = 0
             elif key == "q":
                 self.running = False
+
+    def _reset_pi_move(self):
+        """Restore the servo(s) after a game restart (space/r press)."""
+        if self.last_rocky_move:
+            pi_client.reset_move(self.last_rocky_move)
+            self.last_rocky_move = None
 
     def run_vision(self):
         camera = PiCamera2Source(self.args.width, self.args.height) if self.args.source == "picamera2" else OpenCVCamera(self.args.camera_index, self.args.width, self.args.height)
@@ -123,6 +133,9 @@ class Game:
                             self.score += 1
                             self.lock_id += 1
                             self.locked_frame_jpg = frame_bytes
+                            rocky_move = counter_move(locked)
+                            self.last_rocky_move = rocky_move
+                            pi_client.send_move(rocky_move)
                     if frame_bytes:
                         self.frame_jpg = frame_bytes
 
