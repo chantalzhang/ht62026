@@ -1,8 +1,9 @@
 import argparse
-import ctypes
 import struct
+import subprocess
 import threading
 import time
+from pathlib import Path
 
 import cv2
 import mediapipe as mp
@@ -41,262 +42,114 @@ class OpenCVCamera:
         self.cap.release()
 
 
-# --- QNX Sensor Framework (libcamapi) bindings for camera1 / CAMERA_UNIT_1 ---
+# --- QNX camera1 access via the camera_bridge native helper subprocess ---
 # QNX's Camera API (libcamapi.so, <camera/camera_api.h>) is a native C library
-# with no Python bindings, so QnxCameraSource talks to it directly via ctypes
-# in callback mode (camera_start_viewfinder), which needs no Screen/window
-# setup. Constants below were confirmed against the headers shipped by the
-# qnx-sensor-framework-dev apk package (QNX 8.0.4, Raspberry Pi 5 image).
-CAMERA_UNIT_1 = 1
-CAMERA_HANDLE_INVALID = -1
-CAMERA_EOK = 0
-CAMERA_MODE_PREAD = 1 << 0
-CAMERA_MODE_PWRITE = 1 << 1
-CAMERA_MODE_DREAD = 1 << 2
-CAMERA_MODE_RO = CAMERA_MODE_PREAD | CAMERA_MODE_DREAD
-# camera_set_vf_mode() changes camera configuration, which needs config-write
-# access (PWRITE) even though we only ever read image data (DREAD, no DWRITE).
-CAMERA_MODE_VIEWFINDER = CAMERA_MODE_PREAD | CAMERA_MODE_PWRITE | CAMERA_MODE_DREAD
-CAMERA_MAX_FRAMEDESC_SIZE = 256
-
-CAMERA_FRAMETYPE_RGB8888 = 2
-CAMERA_FRAMETYPE_CBYCRY = 8
-CAMERA_FRAMETYPE_YCBYCR = 14
-CAMERA_FRAMETYPE_BGR8888 = 31
-
-# camera_vfmode_t: a viewfinder mode must be selected with camera_set_vf_mode()
-# before camera_start_viewfinder() is called, or the datapath is left
-# unconfigured (this reliably segfaults inside camera_start_viewfinder).
-CAMERA_VFMODE_DEFAULT = 0
-CAMERA_VFMODE_VIDEO = 1
-
-# camera_imgprop_t values used to configure the viewfinder before starting it.
-# camera_set_vf_property() is actually a header macro:
-#   #define camera_set_vf_property(handle, args...) \
-#       camera_private_set_vf_property(handle, args, CAMERA_IMGPROP_END)
-# so calling the real exported symbol via ctypes requires appending the
-# CAMERA_IMGPROP_END sentinel ourselves to terminate the variadic arg list.
-CAMERA_IMGPROP_END = -1
-CAMERA_IMGPROP_CREATEWINDOW = 19
-
-_camapi = None
+# with no Python bindings. Talking to it directly via ctypes doesn't work on
+# this QNX Python build: camera_start_viewfinder() invokes our callback from a
+# thread libcamapi creates internally (not one Python spawned), and invoking
+# any ctypes CFUNCTYPE callback from such a "foreign" thread reliably
+# segfaults this interpreter -- a systemic ctypes/threading limitation, not a
+# bug in any particular binding (confirmed independently of the camera
+# entirely: even a plain libc pthread_create() thread calling a trivial
+# ctypes callback crashes the same way).
+#
+# So instead, QnxCameraSource launches camera_bridge (built from
+# camera_bridge.c, see that file for the wire protocol) as a subprocess.
+# camera_bridge does the whole camera_open/camera_start_viewfinder dance and
+# all pixel-format conversion in plain C -- which has no such limitation --
+# and streams ready-to-use RGB24 frames to its own stdout. Python only ever
+# reads bytes from an ordinary pipe, so no native callback ever runs inside
+# the Python interpreter.
+_BRIDGE_PATH = Path(__file__).resolve().parent / "camera_bridge"
+_BRIDGE_MAGIC = b"QCF1"
+_BRIDGE_HEADER = struct.Struct("<4sII")  # magic, height, width
 
 
-def _load_camapi():
-    """Lazily load libcamapi.so and bind the handful of functions we need."""
-    global _camapi
-    if _camapi is not None:
-        return _camapi
-
-    lib = ctypes.CDLL("libcamapi.so")
-
-    class camera_buffer_t(ctypes.Structure):
-        _fields_ = [
-            ("frametype", ctypes.c_int32),
-            ("framesize", ctypes.c_uint64),
-            ("framebuf", ctypes.POINTER(ctypes.c_uint8)),
-            ("framemetasize", ctypes.c_uint64),
-            ("framemeta", ctypes.c_void_p),
-            ("frametimestamp", ctypes.c_int64),
-            ("framedesc", ctypes.c_uint8 * CAMERA_MAX_FRAMEDESC_SIZE),
-        ]
-
-    viewfinder_cb_t = ctypes.CFUNCTYPE(
-        None, ctypes.c_int32, ctypes.POINTER(camera_buffer_t), ctypes.c_void_p
-    )
-    status_cb_t = ctypes.CFUNCTYPE(
-        None, ctypes.c_int32, ctypes.c_int32, ctypes.c_uint16, ctypes.c_void_p
-    )
-
-    lib.camera_open.argtypes = [ctypes.c_int32, ctypes.c_uint32, ctypes.POINTER(ctypes.c_int32)]
-    lib.camera_open.restype = ctypes.c_int32
-    lib.camera_close.argtypes = [ctypes.c_int32]
-    lib.camera_close.restype = ctypes.c_int32
-    lib.camera_set_vf_mode.argtypes = [ctypes.c_int32, ctypes.c_int32]
-    lib.camera_set_vf_mode.restype = ctypes.c_int32
-    lib.camera_get_supported_vf_modes.argtypes = [
-        ctypes.c_int32,
-        ctypes.c_uint32,
-        ctypes.POINTER(ctypes.c_uint32),
-        ctypes.POINTER(ctypes.c_int32),
-    ]
-    lib.camera_get_supported_vf_modes.restype = ctypes.c_int32
-    # camera_private_set_vf_property is the real symbol behind the
-    # camera_set_vf_property() variadic macro; deliberately left without
-    # fixed argtypes since the property/value pairs it takes vary in count
-    # and type (int, double, char*) depending on which properties are set.
-    lib.camera_private_set_vf_property.restype = ctypes.c_int32
-    lib.camera_start_viewfinder.argtypes = [ctypes.c_int32, viewfinder_cb_t, status_cb_t, ctypes.c_void_p]
-    lib.camera_start_viewfinder.restype = ctypes.c_int32
-    lib.camera_stop_viewfinder.argtypes = [ctypes.c_int32]
-    lib.camera_stop_viewfinder.restype = ctypes.c_int32
-
-    _camapi = {
-        "lib": lib,
-        "camera_buffer_t": camera_buffer_t,
-        "viewfinder_cb_t": viewfinder_cb_t,
-        "status_cb_t": status_cb_t,
-    }
-    return _camapi
-
-
-def get_supported_vf_modes(handle: int):
-    """Debug helper: return the list of camera_vfmode_t values this camera
-    handle actually supports, per camera_get_supported_vf_modes()."""
-    camapi = _load_camapi()
-    lib = camapi["lib"]
-
-    num_supported = ctypes.c_uint32(0)
-    err = lib.camera_get_supported_vf_modes(handle, 0, ctypes.byref(num_supported), None)
-    if err != CAMERA_EOK:
-        raise RuntimeError(f"camera_get_supported_vf_modes(presize) failed: err={err}")
-
-    count = num_supported.value
-    modes = (ctypes.c_int32 * count)()
-    err = lib.camera_get_supported_vf_modes(handle, count, ctypes.byref(num_supported), modes)
-    if err != CAMERA_EOK:
-        raise RuntimeError(f"camera_get_supported_vf_modes failed: err={err}")
-
-    return list(modes[: num_supported.value])
-
-
-def _yuv422_to_rgb(y0, cb, y1, cr):
-    """Convert BT.601-style 4:2:2 luma/chroma planes (as pixel pairs) to RGB."""
-
-    def _to_rgb(y, cb, cr):
-        y = y.astype(np.float32)
-        cb = cb.astype(np.float32) - 128.0
-        cr = cr.astype(np.float32) - 128.0
-        r = y + 1.402 * cr
-        g = y - 0.344136 * cb - 0.714136 * cr
-        b = y + 1.772 * cb
-        return np.stack([r, g, b], axis=-1)
-
-    rgb_even = _to_rgb(y0, cb, cr)
-    rgb_odd = _to_rgb(y1, cb, cr)
-    height, half_width, _ = rgb_even.shape
-    out = np.empty((height, half_width * 2, 3), dtype=np.float32)
-    out[:, 0::2, :] = rgb_even
-    out[:, 1::2, :] = rgb_odd
-    return np.clip(out, 0, 255).astype(np.uint8)
-
-
-def _qnx_frame_to_rgb(buf):
-    """Convert a camera_buffer_t (RGB8888/BGR8888/YCbYCr/CbYCrY) to an RGB ndarray."""
-    frametype = buf.frametype
-    height, width, stride = struct.unpack_from("<III", bytes(buf.framedesc))
-    if not height or not width or not stride:
-        return None
-
-    if frametype in (CAMERA_FRAMETYPE_RGB8888, CAMERA_FRAMETYPE_BGR8888):
-        data = ctypes.string_at(buf.framebuf, height * stride)
-        rows = np.frombuffer(data, dtype=np.uint8).reshape(height, stride)
-        pixels = rows[:, : width * 4].reshape(height, width, 4)
-        if frametype == CAMERA_FRAMETYPE_RGB8888:
-            return pixels[:, :, :3].copy()
-        return pixels[:, :, 2::-1].copy()  # BGR8888 stores B,G,R,X -> reverse to R,G,B
-
-    if frametype in (CAMERA_FRAMETYPE_YCBYCR, CAMERA_FRAMETYPE_CBYCRY):
-        data = ctypes.string_at(buf.framebuf, height * stride)
-        rows = np.frombuffer(data, dtype=np.uint8).reshape(height, stride)
-        macropixels = rows[:, : width * 2].reshape(height, width // 2, 4)
-        if frametype == CAMERA_FRAMETYPE_YCBYCR:
-            y0, cb, y1, cr = (macropixels[..., i] for i in range(4))
-        else:
-            cb, y0, cr, y1 = (macropixels[..., i] for i in range(4))
-        return _yuv422_to_rgb(y0, cb, y1, cr)
-
-    return None
+def _read_exact(fileobj, size):
+    """Read exactly `size` bytes from a blocking pipe, or None on EOF."""
+    chunks = []
+    remaining = size
+    while remaining > 0:
+        chunk = fileobj.read(remaining)
+        if not chunk:
+            return None
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
 
 
 class QnxCameraSource:
     """Raspberry Pi Camera Module 3 (camera1 / CAMERA_UNIT_1) via QNX's Sensor
-    Framework, accessed directly through libcamapi with ctypes (callback mode).
+    Framework, accessed through the camera_bridge native helper subprocess
+    (see camera_bridge.c for why this indirection is necessary).
     """
 
     name = "qnx"
 
     def __init__(self, width: int = None, height: int = None):
-        camapi = _load_camapi()
-        self._lib = camapi["lib"]
+        del width, height  # negotiated by the camera/BSP, not requested here.
 
-        handle = ctypes.c_int32(CAMERA_HANDLE_INVALID)
-        err = self._lib.camera_open(CAMERA_UNIT_1, CAMERA_MODE_VIEWFINDER, ctypes.byref(handle))
-        if err != CAMERA_EOK or handle.value == CAMERA_HANDLE_INVALID:
-            raise RuntimeError(f"camera_open(CAMERA_UNIT_1) failed: err={err}")
-        self._handle = handle.value
-
-        # Must select a viewfinder mode before starting the viewfinder, otherwise
-        # the datapath is left unconfigured and camera_start_viewfinder segfaults.
-        # This camera/BSP doesn't necessarily support the standard camera_vfmode_t
-        # values (e.g. CAMERA_VFMODE_VIDEO) -- some Raspberry Pi camera BSPs add
-        # their own vendor-specific mode values -- so pick whichever non-default
-        # mode camera_get_supported_vf_modes() actually reports instead of
-        # hardcoding one.
-        supported_modes = get_supported_vf_modes(self._handle)
-        vf_mode = next((m for m in supported_modes if m != CAMERA_VFMODE_DEFAULT), None)
-        if vf_mode is None:
-            self._lib.camera_close(self._handle)
+        if not _BRIDGE_PATH.exists():
             raise RuntimeError(
-                f"Camera reports no non-default viewfinder mode (supported={supported_modes})"
+                f"{_BRIDGE_PATH} not found. Build it on the QNX target first:\n"
+                f"  gcc -o {_BRIDGE_PATH} {_BRIDGE_PATH}.c -lcamapi"
             )
 
-        err = self._lib.camera_set_vf_mode(self._handle, vf_mode)
-        if err != CAMERA_EOK:
-            self._lib.camera_close(self._handle)
-            raise RuntimeError(f"camera_set_vf_mode({vf_mode}) failed: err={err}")
-
-        # By default the Sensor Framework auto-creates a Screen viewfinder
-        # window as a side effect of camera_start_viewfinder(). We're headless
-        # (no Screen/graphics context in this process), so that auto-created
-        # window is almost certainly what segfaults -- disable it explicitly.
-        err = self._lib.camera_private_set_vf_property(
-            self._handle, CAMERA_IMGPROP_CREATEWINDOW, 0, CAMERA_IMGPROP_END
+        self._proc = subprocess.Popen(
+            [str(_BRIDGE_PATH)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            bufsize=0,
         )
-        if err != CAMERA_EOK:
-            self._lib.camera_close(self._handle)
-            raise RuntimeError(f"camera_set_vf_property(CREATEWINDOW=0) failed: err={err}")
 
         self._lock = threading.Lock()
         self._latest_rgb = None
+        self._stopped = False
 
-        def _on_frame(_handle, buf_ptr, _arg):
-            try:
-                rgb = _qnx_frame_to_rgb(buf_ptr.contents)
-            except Exception:
-                rgb = None
-            if rgb is not None:
-                with self._lock:
-                    self._latest_rgb = rgb
+        self._reader_thread = threading.Thread(target=self._read_loop, daemon=True)
+        self._reader_thread.start()
 
-        def _on_status(_handle, _status, _ext_status, _arg):
-            pass
-
-        # Keep references on self so the CFUNCTYPE closures outlive camera_start_viewfinder.
-        # ctypes on this build won't implicitly convert a bare None into a NULL function
-        # pointer for a CFUNCTYPE argtype, so we pass real no-op callbacks instead of None.
-        self._viewfinder_cb = camapi["viewfinder_cb_t"](_on_frame)
-        self._status_cb = camapi["status_cb_t"](_on_status)
-
-        err = self._lib.camera_start_viewfinder(self._handle, self._viewfinder_cb, self._status_cb, None)
-        if err != CAMERA_EOK:
-            self._lib.camera_close(self._handle)
-            raise RuntimeError(f"camera_start_viewfinder(CAMERA_UNIT_1) failed: err={err}")
+    def _read_loop(self):
+        stdout = self._proc.stdout
+        while not self._stopped:
+            header = _read_exact(stdout, _BRIDGE_HEADER.size)
+            if header is None:
+                break
+            magic, height, width = _BRIDGE_HEADER.unpack(header)
+            if magic != _BRIDGE_MAGIC:
+                break
+            payload = _read_exact(stdout, height * width * 3)
+            if payload is None:
+                break
+            rgb = np.frombuffer(payload, dtype=np.uint8).reshape(height, width, 3)
+            with self._lock:
+                self._latest_rgb = rgb
 
     def read_rgb(self):
-        # Frames arrive asynchronously on the library's own callback thread;
-        # briefly wait for the first one instead of returning None right away.
+        # Frames arrive asynchronously on the reader thread; briefly wait for
+        # one instead of returning None right away.
         for _ in range(50):
             with self._lock:
                 rgb = self._latest_rgb
             if rgb is not None:
                 return rgb
+            if self._proc.poll() is not None:
+                return None  # camera_bridge exited; nothing more to wait for.
             time.sleep(0.01)
         return None
 
     def close(self):
-        self._lib.camera_stop_viewfinder(self._handle)
-        self._lib.camera_close(self._handle)
+        self._stopped = True
+        try:
+            if self._proc.stdin:
+                self._proc.stdin.close()
+        except OSError:
+            pass
+        try:
+            self._proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            self._proc.kill()
+        self._reader_thread.join(timeout=2)
 
 
 def parse_args():
@@ -307,7 +160,7 @@ def parse_args():
         "--source",
         choices=("qnx", "opencv"),
         default="qnx",
-        help="Camera source. qnx uses camera1 via libcamapi; opencv is a dev/fallback path.",
+        help="Camera source. qnx uses camera1 via the camera_bridge helper; opencv is a dev/fallback path.",
     )
     parser.add_argument("--camera-index", type=int, default=0)
     parser.add_argument("--width", type=int, default=640)
