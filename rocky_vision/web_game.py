@@ -134,7 +134,7 @@ def make_handler(game):
         def translate_path(self, path):
             path = urlparse(path).path
             if path == "/":
-                path = "/game.html"
+                path = "/landing.html"
             return str(FRONTEND / path.lstrip("/"))
 
         def do_GET(self):
