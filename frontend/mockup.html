@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Rocky UI Mockup</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #f6dfad;
+      font-family: "Arial Black", Impact, Arial, sans-serif;
+    }
+    svg {
+      width: min(1280px, 100vw);
+      height: auto;
+      display: block;
+      box-shadow: 0 24px 80px rgba(0,0,0,.35);
+    }
+    .title { font-size: 58px; font-weight: 900; letter-spacing: 2px; }
+    .score { font-size: 54px; font-weight: 900; }
+    .label { font-size: 30px; font-weight: 900; letter-spacing: 1px; }
+    .move { font-size: 100px; font-weight: 900; letter-spacing: 2px; }
+    .result { font-size: 30px; font-weight: 900; }
+    .small { font-size: 21px; font-weight: 900; }
+    .tiny { font-size: 16px; font-weight: 900; }
+
+    .rocky-pop { animation: pop 900ms ease-in-out infinite alternate; transform-origin: 325px 390px; }
+    .bubble { animation: wobble 750ms ease-in-out infinite alternate; transform-origin: 960px 510px; }
+
+    @keyframes pop { from { transform: scale(1) rotate(-1.4deg); } to { transform: scale(1.035) rotate(-.4deg); } }
+    @keyframes wobble { from { transform: rotate(-1.5deg); } to { transform: rotate(1.5deg); } }
+  </style>
+</head>
+<body>
+<svg viewBox="0 0 1280 720" role="img" aria-label="Cartoon UI mockup for Rocky rock paper scissors game">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="4" flood-color="#000" flood-opacity="0.28"/>
+    </filter>
+    <filter id="bgBlur">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feColorMatrix in="blur" type="saturate" values="0.48"/>
+    </filter>
+    <linearGradient id="arena" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0B3B7A"/>
+      <stop offset="0.48" stop-color="#15151D"/>
+      <stop offset="0.52" stop-color="#15151D"/>
+      <stop offset="1" stop-color="#8F161D"/>
+    </linearGradient>
+    <radialGradient id="blueLight" cx="24%" cy="26%" r="55%">
+      <stop offset="0" stop-color="#5D9AD8" stop-opacity="0.65"/>
+      <stop offset="1" stop-color="#5D9AD8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="redLight" cx="76%" cy="26%" r="55%">
+      <stop offset="0" stop-color="#D94A4A" stop-opacity="0.65"/>
+      <stop offset="1" stop-color="#D94A4A" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- full boxing ring background from boxing_ring.html -->
+  <image href="https://img.magnific.com/free-vector/gradient-boxing-ring-background_23-2150742162.jpg" x="-24" y="-24" width="1328" height="768" preserveAspectRatio="xMidYMid slice" filter="url(#bgBlur)"/>
+  <rect x="0" y="0" width="1280" height="430" fill="#D8CEC0" opacity="0.12"/>
+  <rect width="1280" height="720" fill="#000000" opacity="0.12"/>
+
+  <!-- score -->
+  <g filter="url(#shadow)">
+    <path d="M165 34 L545 26 L570 112 L190 122 Z" fill="#D94A4A" stroke="#0B0B0B" stroke-width="8"/>
+    <path d="M735 26 L1115 34 L1090 122 L710 112 Z" fill="#3F7FCB" stroke="#0B0B0B" stroke-width="8"/>
+    <path d="M548 42 L732 42 L710 102 L570 102 Z" fill="#EFCB4A" stroke="#0B0B0B" stroke-width="7"/>
+
+    <text x="270" y="78" text-anchor="middle" class="small" fill="#FFFFFF" stroke="#0B0B0B" stroke-width="4" paint-order="stroke">ROCKY</text>
+    <text x="450" y="95" text-anchor="middle" class="score" fill="#FFFFFF" stroke="#0B0B0B" stroke-width="6" paint-order="stroke">03</text>
+
+    <text x="640" y="82" text-anchor="middle" class="small" fill="#0B0B0B">SCORE</text>
+
+    <text x="835" y="78" text-anchor="middle" class="small" fill="#FFFFFF" stroke="#0B0B0B" stroke-width="4" paint-order="stroke">YOU</text>
+    <text x="1010" y="95" text-anchor="middle" class="score" fill="#FFFFFF" stroke="#0B0B0B" stroke-width="6" paint-order="stroke">00</text>
+  </g>
+
+  <!-- rocky panel -->
+  <g class="rocky-pop" filter="url(#shadow)">
+    <rect x="55" y="200" width="540" height="440" rx="30" fill="#D94A4A" stroke="#0B0B0B" stroke-width="9"/>
+    <text x="325" y="248" text-anchor="middle" class="label" fill="#FFFFFF" stroke="#0B0B0B" stroke-width="6" paint-order="stroke">ROCKY</text>
+    <rect x="145" y="275" width="360" height="275" rx="16" fill="#3B1B5E" stroke="#FFFFFF" stroke-width="5"/>
+    <image href="assets/scissors.png" x="185" y="270" width="280" height="280"/>
+    <rect x="120" y="575" width="410" height="46" rx="16" fill="#EFCB4A" stroke="#0B0B0B" stroke-width="5"/>
+    <text x="325" y="608" text-anchor="middle" class="small" fill="#0B0B0B">SCISSORS CUT PAPER!</text>
+  </g>
+
+  <!-- you panel -->
+  <g filter="url(#shadow)" transform="rotate(1.5 955 390)">
+    <rect x="685" y="200" width="540" height="440" rx="30" fill="#3F7FCB" stroke="#0B0B0B" stroke-width="9"/>
+    <text x="955" y="248" text-anchor="middle" class="label" fill="#FFFFFF" stroke="#0B0B0B" stroke-width="6" paint-order="stroke">YOU</text>
+    <rect x="725" y="275" width="460" height="275" rx="16" fill="#1F5F8F" stroke="#FFFFFF" stroke-width="5"/>
+
+    <image href="assets/paper.png" x="815" y="288" width="280" height="280"/>
+
+    <rect x="750" y="575" width="410" height="46" rx="16" fill="#0B0B0B" opacity="0.88"/>
+    <text x="955" y="608" text-anchor="middle" class="small" fill="#FFFFFF">THREW: PAPER</text>
+  </g>
+
+  <!-- spiky VS badge -->
+  <g filter="url(#shadow)">
+    <polygon points="640,345 662,372 700,365 680,398 706,430 665,426 648,466 625,430 585,440 604,402 575,374 618,375" fill="#EFCB4A" stroke="#0B0B0B" stroke-width="8" stroke-linejoin="round"/>
+    <text x="640" y="405" text-anchor="middle" dominant-baseline="middle" class="result" fill="#0B0B0B">VS</text>
+  </g>
+
+</svg>
+</body>
+</html>
