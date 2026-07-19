@@ -51,8 +51,12 @@ CAMERA_UNIT_1 = 1
 CAMERA_HANDLE_INVALID = -1
 CAMERA_EOK = 0
 CAMERA_MODE_PREAD = 1 << 0
+CAMERA_MODE_PWRITE = 1 << 1
 CAMERA_MODE_DREAD = 1 << 2
 CAMERA_MODE_RO = CAMERA_MODE_PREAD | CAMERA_MODE_DREAD
+# camera_set_vf_mode() changes camera configuration, which needs config-write
+# access (PWRITE) even though we only ever read image data (DREAD, no DWRITE).
+CAMERA_MODE_VIEWFINDER = CAMERA_MODE_PREAD | CAMERA_MODE_PWRITE | CAMERA_MODE_DREAD
 CAMERA_MAX_FRAMEDESC_SIZE = 256
 
 CAMERA_FRAMETYPE_RGB8888 = 2
@@ -176,7 +180,7 @@ class QnxCameraSource:
         self._lib = camapi["lib"]
 
         handle = ctypes.c_int32(CAMERA_HANDLE_INVALID)
-        err = self._lib.camera_open(CAMERA_UNIT_1, CAMERA_MODE_RO, ctypes.byref(handle))
+        err = self._lib.camera_open(CAMERA_UNIT_1, CAMERA_MODE_VIEWFINDER, ctypes.byref(handle))
         if err != CAMERA_EOK or handle.value == CAMERA_HANDLE_INVALID:
             raise RuntimeError(f"camera_open(CAMERA_UNIT_1) failed: err={err}")
         self._handle = handle.value
