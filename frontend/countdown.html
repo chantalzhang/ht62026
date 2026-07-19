@@ -15,13 +15,13 @@
       position: fixed;
       inset: -28px;
       background: url("assets/boxing_ring.jpg") center / cover no-repeat;
-      animation: focus 3.0s ease-out forwards;
+      animation: focus 4.5s ease-out forwards;
     }
     .shade {
       position: fixed;
       inset: 0;
       background: #000;
-      animation: fadeShade 3.0s ease-out forwards;
+      animation: fadeShade 4.5s ease-out forwards;
     }
     .text {
       position: fixed;
@@ -34,7 +34,7 @@
       font-size: clamp(28px, 5vw, 58px);
       letter-spacing: 2px;
       text-shadow: 0 5px 0 #111;
-      animation: fadeText 3.0s ease-out forwards;
+      animation: fadeText 4.5s ease-out forwards;
     }
     @keyframes focus {
       0% { filter: blur(24px) saturate(.45); transform: scale(1.08); }
@@ -54,11 +54,27 @@
   <div class="ring"></div>
   <div class="shade"></div>
   <div class="text">ENTERING THE RING...</div>
+  <audio id="crowdCheer" src="assets/sounds/crowd_cheering.mp3" preload="auto" autoplay></audio>
 
   <script>
+    const maxVolume = 0.65;
+    crowdCheer.volume = maxVolume;
+    crowdCheer.play().catch(() => {});
+
+    setTimeout(() => {
+      const fadeStart = performance.now();
+      const fadeDuration = 1400;
+      function fadeCrowd(now) {
+        const progress = Math.min((now - fadeStart) / fadeDuration, 1);
+        crowdCheer.volume = maxVolume * (1 - progress);
+        if (progress < 1) requestAnimationFrame(fadeCrowd);
+      }
+      requestAnimationFrame(fadeCrowd);
+    }, 3000);
+
     setTimeout(() => {
       window.location.href = '/game.html';
-    }, 3100);
+    }, 4600);
   </script>
 </body>
 </html>
