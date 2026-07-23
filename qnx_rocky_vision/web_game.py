@@ -206,7 +206,7 @@ def parse_args():
     parser.add_argument("--countdown-step", type=float, default=0.74)
     parser.add_argument("--min-detection-confidence", type=float, default=0.6)
     parser.add_argument("--min-tracking-confidence", type=float, default=0.5)
-    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--port", type=int, default=6767)
     parser.add_argument(
         "--host",
         default="0.0.0.0",
