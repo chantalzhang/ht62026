@@ -1,6 +1,6 @@
 # Rocky 
 
-**Rocky is a phsyicla robot!**
+**Rocky is a phsyical robot!**
 
 Most of the code in this repo is for the support UI. While we are proud of how the game screens, the countdown, the sounds all turned out, the star of the show is the Rocky, made out of scraps from Goldfish snack boxes. 
 
