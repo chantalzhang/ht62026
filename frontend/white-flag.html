@@ -46,12 +46,6 @@
   <div class="red-fade"></div>
   <audio id="giveUpSound" src="assets/sounds/give_up.mp3" preload="auto" autoplay></audio>
 
-  <script>
-    giveUpSound.volume = 0.75;
-    giveUpSound.play().catch(() => {});
-    setTimeout(() => {
-      window.location.href = '/give-up.html';
-    }, 3200);
-  </script>
+  <script src="white-flag.js"></script>
 </body>
 </html>
